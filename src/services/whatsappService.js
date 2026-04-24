@@ -8,7 +8,7 @@ const log = create('WhatsApp');
 async function sendText(serverUrl, instance, apikey, telefone, text) {
   const url = `${serverUrl}/message/sendText/${instance}`;
 
-  log.info('Enviando mensagem', {
+  log.info('📤 Enviando mensagem', {
     telefone,
     instance,
     preview: text?.slice(0, 80),
@@ -22,7 +22,7 @@ async function sendText(serverUrl, instance, apikey, telefone, text) {
       { headers: { apikey } }
     );
 
-    log.info('Mensagem enviada com sucesso', {
+    log.info('✅ Mensagem enviada com sucesso', {
       telefone,
       status: response.status,
       message_id: response.data?.key?.id,
@@ -30,7 +30,7 @@ async function sendText(serverUrl, instance, apikey, telefone, text) {
 
     return response.data;
   } catch (err) {
-    log.error('Falha ao enviar mensagem', {
+    log.error('❌ Falha ao enviar mensagem', {
       telefone,
       url,
       status: err.response?.status,

@@ -3,6 +3,7 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '..', envFil
 const express = require('express');
 const config = require('./config');
 const webhookRouter = require('./webhook');
+const agentControlRouter = require('./routes/agentControl');
 const { create } = require('./utils/logger');
 
 const log = create('Server');
@@ -17,6 +18,9 @@ app.get('/health', (req, res) => {
 
 // Webhook principal
 app.use('/webhook', webhookRouter);
+
+// Controle do agente (pausar/retomar)
+app.use('/agent', agentControlRouter);
 
 // Handler de rotas não encontradas
 app.use((req, res) => {

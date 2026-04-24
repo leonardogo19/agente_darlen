@@ -110,7 +110,7 @@ const tools = [
 
 async function executeTool(name, args, context) {
   const start = Date.now();
-  log.info('Executando tool', { tool: name, args });
+  log.info('⚡ Executando tool', { tool: name, args });
 
   let result;
   try {
@@ -121,7 +121,7 @@ async function executeTool(name, args, context) {
 
       case 'notificar_humano':
         // TODO: integre com seu sistema (webhook, email, Slack, etc.)
-        log.warn('NOTIFICAR HUMANO solicitado', args);
+    log.warn('🔔 NOTIFICAR HUMANO solicitado', args);
         result = { sucesso: true, mensagem: 'Atendente notificado.' };
         break;
 
@@ -146,7 +146,7 @@ async function executeTool(name, args, context) {
     result = { erro: err.message };
   }
 
-  log.info('Tool concluída', { tool: name, elapsed_ms: Date.now() - start, sucesso: !result?.erro });
+  log.info('✔️  Tool concluída', { tool: name, elapsed_ms: Date.now() - start, sucesso: !result?.erro });
   return result;
 }
 
@@ -156,10 +156,10 @@ async function executeTool(name, args, context) {
  * Executa o agente de IA com memória e tools
  */
 async function runAgent(sessionId, userMessage, systemPrompt, context = {}) {
-  const MAX_ITERATIONS = 4;
+  const MAX_ITERATIONS = 6;
   const agentStart = Date.now();
 
-  log.info('Iniciando agente', {
+  log.info('🎯 Iniciando agente', {
     sessionId,
     telefone: context.telefoneCliente,
     preview: userMessage?.slice(0, 80),
@@ -181,7 +181,7 @@ async function runAgent(sessionId, userMessage, systemPrompt, context = {}) {
     iterations++;
     const iterStart = Date.now();
 
-    log.debug(`Iteração ${iterations}/${MAX_ITERATIONS}`, {
+    log.debug(`🔄 Iteração ${iterations}/${MAX_ITERATIONS}`, {
       sessionId,
       total_messages: messages.length,
     });
@@ -198,7 +198,7 @@ async function runAgent(sessionId, userMessage, systemPrompt, context = {}) {
     const assistantMessage = choice.message;
     const toolCalls = assistantMessage.tool_calls || [];
 
-    log.debug(`Resposta OpenAI — iteração ${iterations}`, {
+    log.debug(`📡 OpenAI respondeu — iteração ${iterations}`, {
       sessionId,
       finish_reason: choice.finish_reason,
       tool_calls: toolCalls.map((t) => t.function.name),
@@ -213,7 +213,7 @@ async function runAgent(sessionId, userMessage, systemPrompt, context = {}) {
       const finalText = assistantMessage.content || '';
       await saveMessage(sessionId, 'assistant', finalText);
 
-      log.info('Agente concluído', {
+      log.info('🏁 Agente concluído', {
         sessionId,
         iteracoes: iterations,
         elapsed_ms: Date.now() - agentStart,
@@ -225,7 +225,7 @@ async function runAgent(sessionId, userMessage, systemPrompt, context = {}) {
     }
 
     // Executa tools em paralelo
-    log.info('Executando tools', { sessionId, tools: toolCalls.map((t) => t.function.name) });
+    log.info('🔧 Executando tools', { sessionId, tools: toolCalls.map((t) => t.function.name) });
 
     const toolResults = await Promise.all(
       toolCalls.map(async (toolCall) => {
@@ -250,7 +250,7 @@ async function runAgent(sessionId, userMessage, systemPrompt, context = {}) {
   }
 
   // Fallback se atingiu o limite de iterações
-  log.warn('Limite de iterações atingido', { sessionId, MAX_ITERATIONS });
+  log.warn('🚨 Limite de iterações atingido', { sessionId, MAX_ITERATIONS });
   const fallback = 'Desculpe, não consegui processar sua solicitação. Por favor, tente novamente.';
   await saveMessage(sessionId, 'assistant', fallback);
   return fallback;

@@ -1,7 +1,7 @@
 const express = require('express');
 const config = require('./config');
 const { enqueue, cancel } = require('./services/debouncerService');
-const { getClientByPhone, createClient, updateClientSession, pauseClient } = require('./services/supabaseService');
+const { getClientByPhone, createClient, updateClientSession, pauseClient, unpauseClient } = require('./services/supabaseService');
 const { sendText } = require('./services/whatsappService');
 const { runAgent } = require('./services/aiService');
 const { buildSystemPrompt } = require('./services/promptService');
@@ -53,8 +53,17 @@ async function processWebhook(body, requestId) {
   });
 
   // ── 2. Ignora mensagens enviadas pelo próprio bot ──────────────────────────
+  // A Evolution pode mandar fromMe=true OU o remoteJid igual ao sender (número da instância)
   if (body?.data?.key?.fromMe === true) {
     log.debug('Ignorando mensagem própria (fromMe=true)', { requestId, telefoneCliente });
+    return;
+  }
+
+  // Ignora também se o telefone do cliente for igual ao número da instância (bot respondendo)
+  const senderNumber = body?.sender?.replace(/\D/g, '');
+  const clientNumber = campos.telefoneCliente?.replace(/\D/g, '').replace(/@.*/, '');
+  if (senderNumber && clientNumber && senderNumber === clientNumber) {
+    log.debug('Ignorando mensagem do próprio número da instância', { requestId, telefoneCliente });
     return;
   }
 
@@ -109,8 +118,21 @@ async function processWebhook(body, requestId) {
     });
 
     if (clientRecord.pausado === true) {
-      log.warn('Cliente pausado — mensagem ignorada', { requestId, telefoneCliente, id: clientRecord.id });
-      return;
+      // Verifica se a pausa já expirou
+      const pausaFim = clientRecord.pausa_fim ? new Date(clientRecord.pausa_fim) : null;
+      if (pausaFim && pausaFim <= new Date()) {
+        log.info('Pausa expirada — retomando atendimento automaticamente', {
+          requestId, id: clientRecord.id, pausaFim: pausaFim.toISOString(),
+        });
+        await unpauseClient(clientRecord.id);
+        clientRecord.pausado = false;
+      } else {
+        log.warn('Cliente pausado — mensagem ignorada', {
+          requestId, telefoneCliente, id: clientRecord.id,
+          pausa_fim: pausaFim?.toISOString(),
+        });
+        return;
+      }
     }
 
     if (!clientRecord.sessionId) {
@@ -132,9 +154,20 @@ async function processWebhook(body, requestId) {
   }
 
   // ── 7. Resolve o texto da mensagem ────────────────────────────────────────
-  const messageText = tipoMensagem === 'audioMessage'
-    ? body?.data?.message?.speechToText
-    : mensagem;
+  let messageText;
+
+  if (tipoMensagem === 'audioMessage') {
+    messageText = body?.data?.message?.speechToText;
+    if (!messageText) {
+      // Áudio sem transcrição — avisa o usuário
+      log.warn('Áudio sem speechToText — pedindo para reenviar', { requestId, telefoneCliente });
+      await sendText(serverUrl, nomeInstancia, apikey, telefoneCliente,
+        'Não consegui ouvir seu áudio. Pode digitar sua mensagem?');
+      return;
+    }
+  } else {
+    messageText = mensagem;
+  }
 
   if (!messageText) {
     log.warn('Mensagem sem texto — ignorando', { requestId, telefoneCliente, tipoMensagem });
@@ -144,6 +177,7 @@ async function processWebhook(body, requestId) {
   // ── 8. Debouncer em memória ───────────────────────────────────────────────
   log.debug('Enfileirando no debouncer', { requestId, telefoneCliente, sessionId });
 
+  // Contexto de envio sempre atualizado — o onFlush usa o da mensagem mais recente
   enqueue(
     telefoneCliente,
     { message: messageText, timestamp: new Date().toISOString(), message_id: idMensagem },
@@ -182,11 +216,35 @@ async function processMessages(messages, telefoneCliente, sessionId, serverUrl, 
     return;
   }
 
-  await sendText(serverUrl, nomeInstancia, apikey, telefoneCliente, response);
+  // Divide a resposta em partes pelo separador |||
+  const partes = response
+    .split('|||')
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  log.info('Enviando resposta picotada', {
+    telefoneCliente,
+    total_partes: partes.length,
+    partes: partes.map((p) => p.slice(0, 50)),
+  });
+
+  for (let i = 0; i < partes.length; i++) {
+    const parte = partes[i];
+
+    // Delay entre partes: ~60ms por caractere, mínimo 800ms, máximo 3000ms
+    if (i > 0) {
+      const delay = Math.min(Math.max(parte.length * 60, 800), 3000);
+      log.debug(`Aguardando ${delay}ms antes da parte ${i + 1}`, { telefoneCliente });
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+
+    await sendText(serverUrl, nomeInstancia, apikey, telefoneCliente, parte);
+  }
 
   log.info('Ciclo completo', {
     telefoneCliente,
     sessionId,
+    partes: partes.length,
     elapsed_ms: Date.now() - start,
   });
 }

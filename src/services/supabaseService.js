@@ -66,14 +66,15 @@ async function updateClientSession(id, sessionId, idMensagem, telefone) {
 }
 
 /**
- * Pausa o atendimento do aluno por 3 horas
+ * Pausa o atendimento do aluno por X horas (padrão: 3h)
  */
-async function pauseClient(id) {
+async function pauseClient(id, horas = 3) {
   const now = new Date();
-  const pausaFim = new Date(now.getTime() + 3 * 60 * 60 * 1000);
+  const pausaFim = new Date(now.getTime() + horas * 60 * 60 * 1000);
 
   log.warn('Pausando atendimento do cliente', {
     id,
+    horas,
     pausa_inicio: now.toISOString(),
     pausa_fim: pausaFim.toISOString(),
   });
@@ -93,4 +94,25 @@ async function pauseClient(id) {
   }
 }
 
-module.exports = { getClientByPhone, createClient, updateClientSession, pauseClient };
+/**
+ * Retoma o atendimento do aluno (remove a pausa)
+ */
+async function unpauseClient(id) {
+  log.info('Retomando atendimento do cliente', { id });
+
+  const { error } = await supabase
+    .from('alunos')
+    .update({
+      pausado: false,
+      pausa_inicio: null,
+      pausa_fim: null,
+    })
+    .eq('id', id);
+
+  if (error) {
+    log.error('Erro ao retomar cliente', { id, error: error.message });
+    throw new Error(`[Supabase] unpauseClient: ${error.message}`);
+  }
+}
+
+module.exports = { getClientByPhone, createClient, updateClientSession, pauseClient, unpauseClient };
