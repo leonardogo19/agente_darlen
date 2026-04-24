@@ -17,6 +17,7 @@ router.post('/', async (req, res) => {
   const requestId = uuidv4().slice(0, 8); // ID curto para rastrear o request nos logs
   log.info('Webhook recebido', {
     requestId,
+    event: req.body?.event,
     messageType: req.body?.data?.messageType,
     instance: req.body?.instance,
     fromMe: req.body?.data?.key?.fromMe,
@@ -57,8 +58,16 @@ async function processWebhook(body, requestId) {
     return;
   }
 
-  // ── 3. Ignora status DELIVERY_ACK ─────────────────────────────────────────
-  if (body?.data?.status === 'DELIVERY_ACK') {
+  // ── 3. Processa apenas eventos de mensagem nova (MESSAGES_UPSERT)
+  //       Ignora delivery, read receipts, etc.
+  const event = body?.event;
+  if (event && event !== 'messages.upsert') {
+    log.debug('Ignorando evento não relevante', { requestId, event, telefoneCliente });
+    return;
+  }
+
+  // Fallback: se não vier o campo event, filtra por status conhecido de não-mensagem
+  if (!event && body?.data?.status === 'DELIVERY_ACK') {
     log.debug('Ignorando DELIVERY_ACK', { requestId, telefoneCliente });
     return;
   }
