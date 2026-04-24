@@ -7,6 +7,7 @@ const { create } = require('../utils/logger');
 
 const log = create('AI');
 const openai = new OpenAI({ apiKey: config.openai.apiKey });
+const SEP = '|||';
 
 // ─── Definição das tools ────────────────────────────────────────────────────
 
@@ -131,7 +132,7 @@ async function executeTool(name, args, context) {
         const conteudo = await buscarInfo(args.query);
         if (conteudo) {
           result = {
-            instrucao: 'Reformule estas informações em texto corrido e natural, sem markdown, sem bullets, sem títulos. Escreva como numa conversa de WhatsApp.',
+            instrucao: `Reformule estas informações em texto corrido e natural, sem markdown, sem bullets, sem títulos. Escreva como numa conversa de WhatsApp. OBRIGATÓRIO: quebre em partes curtas usando ${SEP} — cada plano ou informação em uma parte separada.`,
             conteudo,
           };
         } else {

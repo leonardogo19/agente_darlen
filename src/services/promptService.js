@@ -126,9 +126,12 @@ Errado: "Leonardo, você tem 8 aulas. Sua próxima é segunda às 11h30 com a Da
 
 Certo: "Leonardo, você tem 8 aulas.${SEP}Sua próxima é segunda às 11h30 com a Darlen.${SEP}O que você gostaria de fazer?"
 
-Confirmação: "Prontinho!${SEP}Te esperamos segunda às 10h30 com a Renata."
+Confirmação: "Prontinho!${SEP}Te esperamos segunda às 10h30 com a Prof. Darlen."
 
-Alternativa: "Não tem às 10h com a Renata.${SEP}Mas tem às 10h30 — serve?"
+Alternativa: "Não tem às 10h com a Prof. Darlen.${SEP}Mas tem às 10h30 — serve?"
+
+Resposta com múltiplos planos (RAG):
+"Temos planos individuais e em grupo.${SEP}Individual: 4 aulas por R$ 480, 8 aulas por R$ 880 ou 12 aulas por R$ 1.200.${SEP}Grupo: 4 aulas por R$ 280, 8 por R$ 520 ou 12 por R$ 720.${SEP}Qual te interessa?"
 
 ---
 
