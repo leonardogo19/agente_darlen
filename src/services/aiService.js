@@ -2,6 +2,7 @@ const OpenAI = require('openai');
 const config = require('../config');
 const { chamarApiStudio } = require('./studioApiService');
 const { saveMessage, getHistory } = require('./memoryService');
+const { buscarInfo } = require('./ragService');
 const { create } = require('../utils/logger');
 
 const log = create('AI');
@@ -125,11 +126,16 @@ async function executeTool(name, args, context) {
         result = { sucesso: true, mensagem: 'Atendente notificado.' };
         break;
 
-      case 'buscar_info':
-        // TODO: integre com seu Supabase Vector Store / RAG
-        log.info('BUSCAR INFO (RAG)', { query: args.query });
-        result = { resultado: 'Informação não disponível no momento.' };
+      case 'buscar_info': {
+        log.info('🔍 BUSCAR INFO (RAG)', { query: args.query });
+        const conteudo = await buscarInfo(args.query);
+        if (conteudo) {
+          result = { resultado: conteudo };
+        } else {
+          result = { resultado: 'Nenhuma informação encontrada para esta consulta.' };
+        }
         break;
+      }
 
       case 'enviar_midia':
         // TODO: integre com seu sistema de envio de mídia
