@@ -55,11 +55,18 @@ async function buscarInfo(query) {
       scores: data.map((d) => d.similarity?.toFixed(3)),
     });
 
-    // 3. Concatena os conteúdos encontrados
+    // 3. Limpa markdown e concatena os conteúdos encontrados
+    const { cleanMarkdown } = require('../utils/cleanText');
+
     const resultado = data
-      .map((doc) => doc.content || doc.text || doc.pageContent || '')
+      .map((doc) => {
+        const raw = doc.content || doc.text || doc.pageContent || '';
+        return cleanMarkdown(raw);
+      })
       .filter(Boolean)
-      .join('\n\n---\n\n');
+      .join('\n\n');
+
+    log.debug('Conteúdo RAG limpo', { query, chars: resultado.length, preview: resultado.slice(0, 150) });
 
     return resultado;
 

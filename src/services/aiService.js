@@ -80,7 +80,7 @@ const tools = [
     type: 'function',
     function: {
       name: 'buscar_info',
-      description: 'Busca informações no RAG (preços, planos, horários, localização, convênios). Máximo 2 chamadas por pergunta.',
+      description: 'Busca informações no RAG (preços, planos, horários, localização, convênios, benefícios). IMPORTANTE: após receber o resultado, reescreva as informações em texto corrido e natural, como se estivesse explicando numa conversa. NUNCA copie o texto do resultado diretamente — sempre reformule em linguagem simples sem markdown.',
       parameters: {
         type: 'object',
         required: ['query'],
@@ -130,7 +130,10 @@ async function executeTool(name, args, context) {
         log.info('🔍 BUSCAR INFO (RAG)', { query: args.query });
         const conteudo = await buscarInfo(args.query);
         if (conteudo) {
-          result = { resultado: conteudo };
+          result = {
+            instrucao: 'Reformule estas informações em texto corrido e natural, sem markdown, sem bullets, sem títulos. Escreva como numa conversa de WhatsApp.',
+            conteudo,
+          };
         } else {
           result = { resultado: 'Nenhuma informação encontrada para esta consulta.' };
         }
