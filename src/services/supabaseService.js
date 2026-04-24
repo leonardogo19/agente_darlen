@@ -1,10 +1,10 @@
-const { createClient } = require('@supabase/supabase-js');
+const { createClient: createSupabaseClient } = require('@supabase/supabase-js');
 const { v4: uuidv4 } = require('uuid');
 const config = require('../config');
 const { create } = require('../utils/logger');
 
 const log = create('Supabase');
-const supabase = createClient(config.supabase.url, config.supabase.key);
+const supabase = createSupabaseClient(config.supabase.url, config.supabase.key);
 
 /**
  * Busca aluno pelo telefone e empresa
