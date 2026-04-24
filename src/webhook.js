@@ -6,6 +6,7 @@ const { sendText } = require('./services/whatsappService');
 const { runAgent } = require('./services/aiService');
 const { buildSystemPrompt } = require('./services/promptService');
 const { create } = require('./utils/logger');
+const { cleanMarkdown } = require('./utils/cleanText');
 const { v4: uuidv4 } = require('uuid');
 
 const log = create('Webhook');
@@ -219,7 +220,7 @@ async function processMessages(messages, telefoneCliente, sessionId, serverUrl, 
   // Divide a resposta em partes pelo separador |||
   const partes = response
     .split('|||')
-    .map((p) => p.trim())
+    .map((p) => cleanMarkdown(p))
     .filter(Boolean);
 
   log.info('Enviando resposta picotada', {
