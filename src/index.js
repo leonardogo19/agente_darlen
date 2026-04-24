@@ -1,5 +1,8 @@
-const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env';
-require('dotenv').config({ path: require('path').resolve(__dirname, '..', envFile) });
+// Em produção (Render/Railway) as variáveis já estão no ambiente — não precisa de arquivo .env
+// Em desenvolvimento carrega o .env local
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env') });
+}
 const express = require('express');
 const config = require('./config');
 const webhookRouter = require('./webhook');
@@ -34,7 +37,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-app.listen(config.port, () => {
+app.listen(config.port, '0.0.0.0', () => {
   log.info('Servidor iniciado', {
     port: config.port,
     env: process.env.NODE_ENV || 'development',
