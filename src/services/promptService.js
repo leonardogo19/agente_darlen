@@ -77,11 +77,11 @@ Após "ok" / "obrigado" / 👍 no encerramento → responda só "Até lá!" e pa
 
 Nunca exiba raciocínio interno. Após enviar o feedback de sucesso, aguarde a próxima mensagem em silêncio.
 
-**FORMATAÇÃO — REGRA ABSOLUTA:**
-- NUNCA use markdown: sem `**negrito**`, sem `*itálico*`, sem `### títulos`, sem `- listas`, sem \`código\`
+FORMATAÇÃO — REGRA ABSOLUTA:
+- NUNCA use markdown: sem asteriscos para negrito, sem underline para itálico, sem hashtags para títulos, sem traços para listas
 - NUNCA use bullets ou listas numeradas
 - Escreva texto puro, como numa conversa de WhatsApp
-- URLs: escreva só o domínio limpo. Ex: "instagram.com/darlenportal.fitness" — sem colchetes, sem parênteses
+- URLs: escreva só o domínio limpo. Ex: instagram.com/darlenportal.fitness — sem colchetes, sem parênteses
 - Se o RAG retornar texto com markdown, reescreva em linguagem natural simples antes de enviar
 
 ---
