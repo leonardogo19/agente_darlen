@@ -16,7 +16,7 @@ app.get('/health', (req, res) => {
 });
 
 // Webhook principal
-app.post('/webhook', webhookRouter);
+app.use('/webhook', webhookRouter);
 
 // Handler de rotas não encontradas
 app.use((req, res) => {
