@@ -11,58 +11,21 @@ const log = create('AI');
 const openai = new OpenAI({ apiKey: config.openai.apiKey });
 const SEP = '|||';
 
-// ─── Definição das tools ────────────────────────────────────────────────────
+// ─── Tools individuais por ação ──────────────────────────────────────────────
 
 const tools = [
+
+  // ── Alunos ────────────────────────────────────────────────────────────────
   {
     type: 'function',
     function: {
-      name: 'chamar_api_studio',
-      description: `Chama a API do estúdio. Regras de uso:
-- "alunos" GET: busca aluno. Use params.q com o telefone. Ex: { acao:"alunos", metodo:"GET", params:{ q:"5551..." } }
-- "verificar-disponibilidade": SEMPRE use corpo com inicio, fim (ISO -03:00), tipo_aula e aluno_id. Ex: { acao:"verificar-disponibilidade", corpo:{ inicio:"2026-04-28T10:00:00-03:00", fim:"2026-04-28T11:00:00-03:00", tipo_aula:"individual", aluno_id:"uuid" } }
-- "agendar": use corpo com aluno_id, professor_id, data_inicio (ISO -03:00), tipo_aula
-- "remarcar": use corpo com agendamento_antigo_id, novo_inicio (ISO -03:00), professor_id
-- "cancelar": use corpo com agendamento_id e motivo
-- NUNCA coloque inicio/fim/data_inicio em params — sempre em corpo`,
+      name: 'buscar_aluno',
+      description: 'Busca um aluno pelo telefone, email ou CPF. Use sempre no início da conversa para identificar o aluno.',
       parameters: {
         type: 'object',
-        required: ['acao'],
+        required: ['q'],
         properties: {
-          acao: {
-            type: 'string',
-            enum: ['alunos', 'professores', 'verificar-disponibilidade', 'agendar', 'remarcar', 'cancelar', 'ativar-pacote', 'listar-pacotes'],
-          },
-          metodo: { type: 'string', enum: ['GET', 'POST'] },
-          params: {
-            type: 'object',
-            properties: {
-              q:        { type: 'string' },
-              aluno_id: { type: 'string' },
-              limit:    { type: 'integer' },
-            },
-          },
-          corpo: {
-            type: 'object',
-            properties: {
-              aluno_id:              { type: 'string' },
-              nome:                  { type: 'string' },
-              telefone:              { type: 'string' },
-              cpf:                   { type: 'string' },
-              email:                 { type: 'string' },
-              professor_id:          { type: 'string' },
-              data_inicio:           { type: 'string', description: 'ISO 8601 com -03:00. Para agendar.' },
-              inicio:                { type: 'string', description: 'Início da janela ISO -03:00. Para verificar-disponibilidade.' },
-              fim:                   { type: 'string', description: 'Fim da janela ISO -03:00. Para verificar-disponibilidade.' },
-              tipo_aula:             { type: 'string', enum: ['individual', 'vip', 'grupo', 'experimental'] },
-              agendamento_id:        { type: 'string' },
-              agendamento_antigo_id: { type: 'string' },
-              novo_inicio:           { type: 'string', description: 'Novo horário ISO -03:00 para remarcar.' },
-              motivo:                { type: 'string' },
-              observacoes:           { type: 'string' },
-              pacote_id:             { type: 'string' },
-            },
-          },
+          q: { type: 'string', description: 'Telefone, email ou CPF do aluno' },
         },
       },
     },
@@ -70,40 +33,164 @@ const tools = [
   {
     type: 'function',
     function: {
-      name: 'notificar_humano',
-      description: 'Notifica um atendente humano quando necessário (renovação, reclamação, erro persistente, pedido de humano).',
+      name: 'cadastrar_aluno',
+      description: 'Cadastra um novo aluno no sistema.',
       parameters: {
         type: 'object',
-        required: ['problema', 'resumo'],
+        required: ['nome', 'telefone'],
         properties: {
-          aluno_id:  { type: 'string' },
-          nome:      { type: 'string' },
-          telefone:  { type: 'string' },
-          problema:  { type: 'string', description: "'saldo incorreto' | 'cobrança' | 'reclamação' | 'pedido de atendimento humano' | 'erro de agendamento' | 'renovação de plano'" },
-          resumo:    { type: 'string' },
+          nome:     { type: 'string' },
+          telefone: { type: 'string' },
+          email:    { type: 'string' },
+          cpf:      { type: 'string' },
         },
       },
     },
   },
+
+  // ── Disponibilidade ───────────────────────────────────────────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'verificar_disponibilidade',
+      description: 'Verifica horários disponíveis para agendamento. Sempre chame antes de confirmar qualquer aula.',
+      parameters: {
+        type: 'object',
+        required: ['inicio', 'fim', 'tipo_aula', 'aluno_id'],
+        properties: {
+          inicio:       { type: 'string', description: 'Início da janela em ISO 8601 com -03:00. Ex: 2026-04-28T10:00:00-03:00' },
+          fim:          { type: 'string', description: 'Fim da janela em ISO 8601 com -03:00. Ex: 2026-04-28T11:00:00-03:00' },
+          tipo_aula:    { type: 'string', enum: ['individual', 'vip', 'grupo', 'experimental'] },
+          aluno_id:     { type: 'string', description: 'UUID do aluno' },
+          professor_id: { type: 'string', description: 'UUID do professor (opcional — filtra por professor específico)' },
+        },
+      },
+    },
+  },
+
+  // ── Agendamento ───────────────────────────────────────────────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'agendar_aula',
+      description: 'Cria um agendamento e debita o saldo do aluno. Só chame após confirmação explícita do aluno.',
+      parameters: {
+        type: 'object',
+        required: ['aluno_id', 'professor_id', 'data_inicio', 'tipo_aula'],
+        properties: {
+          aluno_id:     { type: 'string' },
+          professor_id: { type: 'string' },
+          data_inicio:  { type: 'string', description: 'Data e hora em ISO 8601 com -03:00. Ex: 2026-04-28T10:00:00-03:00' },
+          tipo_aula:    { type: 'string', enum: ['individual', 'vip', 'grupo', 'experimental'] },
+          observacoes:  { type: 'string' },
+        },
+      },
+    },
+  },
+
+  // ── Remarcação ────────────────────────────────────────────────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'remarcar_aula',
+      description: 'Remarca uma aula existente sem debitar saldo. Use SEMPRE para trocar horário — nunca cancelar + agendar.',
+      parameters: {
+        type: 'object',
+        required: ['agendamento_antigo_id', 'novo_inicio', 'professor_id'],
+        properties: {
+          agendamento_antigo_id: { type: 'string', description: 'ID do agendamento a ser remarcado' },
+          novo_inicio:           { type: 'string', description: 'Novo horário em ISO 8601 com -03:00' },
+          professor_id:          { type: 'string', description: 'UUID do professor (mesmo professor original)' },
+        },
+      },
+    },
+  },
+
+  // ── Cancelamento ──────────────────────────────────────────────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'cancelar_aula',
+      description: 'Cancela uma aula agendada. Devolve crédito se cancelado com mais de 2 horas de antecedência.',
+      parameters: {
+        type: 'object',
+        required: ['agendamento_id'],
+        properties: {
+          agendamento_id: { type: 'string' },
+          motivo:         { type: 'string', description: 'Motivo do cancelamento' },
+        },
+      },
+    },
+  },
+
+  // ── Professores ───────────────────────────────────────────────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'listar_professores',
+      description: 'Lista os professores disponíveis no estúdio.',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+
+  // ── Pacotes ───────────────────────────────────────────────────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'listar_pacotes',
+      description: 'Lista os pacotes de aulas disponíveis para compra.',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+
+  // ── RAG / Info ────────────────────────────────────────────────────────────
   {
     type: 'function',
     function: {
       name: 'buscar_info',
-      description: 'Busca informações no RAG (preços, planos, horários, localização, convênios, benefícios). IMPORTANTE: após receber o resultado, reescreva as informações em texto corrido e natural, como se estivesse explicando numa conversa. NUNCA copie o texto do resultado diretamente — sempre reformule em linguagem simples sem markdown.',
+      description: 'Busca informações no banco de conhecimento (preços, planos, horários de funcionamento, localização, convênios, benefícios do pilates, estrutura). Use proativamente quando o aluno perguntar sobre qualquer um desses temas. Após receber o resultado, reescreva em linguagem natural simples sem markdown.',
       parameters: {
         type: 'object',
         required: ['query'],
         properties: {
-          query: { type: 'string', description: 'Termos-chave — não a pergunta completa.' },
+          query: { type: 'string', description: 'Termos-chave da busca. Ex: "preços planos mensalidade", "horário funcionamento", "benefícios pilates"' },
         },
       },
     },
   },
+
+  // ── Notificação humano ────────────────────────────────────────────────────
+  {
+    type: 'function',
+    function: {
+      name: 'notificar_humano',
+      description: 'Notifica um atendente humano. Use quando: aluno pede humano, dúvida sobre cobrança/saldo, erro persistente de API, aluno quer renovar ou comprar créditos.',
+      parameters: {
+        type: 'object',
+        required: ['problema', 'resumo'],
+        properties: {
+          aluno_id: { type: 'string' },
+          nome:     { type: 'string' },
+          telefone: { type: 'string' },
+          problema: { type: 'string', description: 'saldo incorreto | cobrança | reclamação | pedido de atendimento humano | erro de agendamento | renovação de plano' },
+          resumo:   { type: 'string', description: '2 a 4 frases resumindo a situação' },
+        },
+      },
+    },
+  },
+
+  // ── Mídia ─────────────────────────────────────────────────────────────────
   {
     type: 'function',
     function: {
       name: 'enviar_midia',
-      description: 'Envia mídia ao aluno. Usar somente quando o aluno pedir explicitamente.',
+      description: 'Envia fotos do estúdio ao aluno. Use somente quando o aluno pedir explicitamente.',
       parameters: {
         type: 'object',
         required: ['categoria', 'telefone'],
@@ -125,43 +212,55 @@ async function executeTool(name, args, context) {
   let result;
   try {
     switch (name) {
-      case 'chamar_api_studio': {
-        // Correção automática: modelo às vezes manda inicio/fim em params em vez de corpo
-        const fixedArgs = { ...args };
-        if (fixedArgs.params) {
-          const camposCorporo = ['inicio', 'fim', 'data_inicio', 'novo_inicio', 'tipo_aula',
-            'aluno_id', 'professor_id', 'agendamento_id', 'agendamento_antigo_id', 'motivo'];
-          fixedArgs.corpo = fixedArgs.corpo || {};
-          for (const campo of camposCorporo) {
-            if (fixedArgs.params[campo] !== undefined) {
-              fixedArgs.corpo[campo] = fixedArgs.params[campo];
-              delete fixedArgs.params[campo];
-              log.warn(`⚠️  Campo "${campo}" movido de params para corpo`, { acao: fixedArgs.acao });
-            }
-          }
-        }
-        result = await chamarApiStudio(fixedArgs);
-        break;
-      }
 
-      case 'notificar_humano':
-        log.warn('🔔 NOTIFICAR HUMANO solicitado', args);
-        result = await notificarHumano(args, context.wpp || {});
+      case 'buscar_aluno':
+        result = await chamarApiStudio({ acao: 'alunos', metodo: 'GET', params: { q: args.q } });
+        break;
+
+      case 'cadastrar_aluno':
+        result = await chamarApiStudio({ acao: 'alunos', metodo: 'POST', corpo: args });
+        break;
+
+      case 'verificar_disponibilidade':
+        result = await chamarApiStudio({ acao: 'verificar-disponibilidade', corpo: args });
+        break;
+
+      case 'agendar_aula':
+        result = await chamarApiStudio({ acao: 'agendar', corpo: args });
+        break;
+
+      case 'remarcar_aula':
+        result = await chamarApiStudio({ acao: 'remarcar', corpo: args });
+        break;
+
+      case 'cancelar_aula':
+        result = await chamarApiStudio({
+          acao: 'cancelar',
+          corpo: { agendamento_id: args.agendamento_id, motivo: args.motivo || 'Cancelamento solicitado pelo aluno' },
+        });
+        break;
+
+      case 'listar_professores':
+        result = await chamarApiStudio({ acao: 'professores', metodo: 'GET' });
+        break;
+
+      case 'listar_pacotes':
+        result = await chamarApiStudio({ acao: 'listar-pacotes', metodo: 'GET' });
         break;
 
       case 'buscar_info': {
         log.info('🔍 BUSCAR INFO (RAG)', { query: args.query });
         const conteudo = await buscarInfo(args.query);
-        if (conteudo) {
-          result = {
-            instrucao: `Reformule estas informações em texto corrido e natural, sem markdown, sem bullets, sem títulos. Escreva como numa conversa de WhatsApp. OBRIGATÓRIO: quebre em partes curtas usando ${SEP} — cada plano ou informação em uma parte separada.`,
-            conteudo,
-          };
-        } else {
-          result = { resultado: 'Nenhuma informação encontrada para esta consulta.' };
-        }
+        result = conteudo
+          ? { instrucao: `Reformule em texto corrido natural, sem markdown. Use ${SEP} para separar cada informação.`, conteudo }
+          : { resultado: 'Nenhuma informação encontrada.' };
         break;
       }
+
+      case 'notificar_humano':
+        log.warn('🔔 NOTIFICAR HUMANO', args);
+        result = await notificarHumano(args, context.wpp || {});
+        break;
 
       case 'enviar_midia':
         log.info('📸 ENVIAR MÍDIA', args);
@@ -183,11 +282,8 @@ async function executeTool(name, args, context) {
 
 // ─── Loop do agente ──────────────────────────────────────────────────────────
 
-/**
- * Executa o agente de IA com memória e tools
- */
 async function runAgent(sessionId, userMessage, systemPrompt, context = {}) {
-  const MAX_ITERATIONS = 6;
+  const MAX_ITERATIONS = 8;
   const agentStart = Date.now();
 
   log.info('🎯 Iniciando agente', {
@@ -212,10 +308,7 @@ async function runAgent(sessionId, userMessage, systemPrompt, context = {}) {
     iterations++;
     const iterStart = Date.now();
 
-    log.debug(`🔄 Iteração ${iterations}/${MAX_ITERATIONS}`, {
-      sessionId,
-      total_messages: messages.length,
-    });
+    log.debug(`🔄 Iteração ${iterations}/${MAX_ITERATIONS}`, { sessionId, total_messages: messages.length });
 
     const response = await openai.chat.completions.create({
       model: config.openai.model,
@@ -239,11 +332,9 @@ async function runAgent(sessionId, userMessage, systemPrompt, context = {}) {
 
     messages.push(assistantMessage);
 
-    // Sem tool calls → resposta final
     if (toolCalls.length === 0) {
       const finalText = assistantMessage.content || '';
       await saveMessage(sessionId, 'assistant', finalText);
-
       log.info('🏁 Agente concluído', {
         sessionId,
         iteracoes: iterations,
@@ -251,36 +342,25 @@ async function runAgent(sessionId, userMessage, systemPrompt, context = {}) {
         tokens_total: response.usage?.total_tokens,
         preview: finalText?.slice(0, 80),
       });
-
       return finalText;
     }
 
-    // Executa tools em paralelo
     log.info('🔧 Executando tools', { sessionId, tools: toolCalls.map((t) => t.function.name) });
 
     const toolResults = await Promise.all(
       toolCalls.map(async (toolCall) => {
         let args;
-        try {
-          args = JSON.parse(toolCall.function.arguments);
-        } catch {
-          args = {};
-        }
+        try { args = JSON.parse(toolCall.function.arguments); } catch { args = {}; }
         const result = await executeTool(toolCall.function.name, args, context);
         return { tool_call_id: toolCall.id, result };
       })
     );
 
     for (const { tool_call_id, result } of toolResults) {
-      messages.push({
-        role: 'tool',
-        tool_call_id,
-        content: JSON.stringify(result),
-      });
+      messages.push({ role: 'tool', tool_call_id, content: JSON.stringify(result) });
     }
   }
 
-  // Fallback se atingiu o limite de iterações
   log.warn('🚨 Limite de iterações atingido', { sessionId, MAX_ITERATIONS });
   const fallback = 'Desculpe, não consegui processar sua solicitação. Por favor, tente novamente.';
   await saveMessage(sessionId, 'assistant', fallback);
