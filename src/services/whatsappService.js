@@ -41,4 +41,32 @@ async function sendText(serverUrl, instance, apikey, telefone, text) {
   }
 }
 
-module.exports = { sendText };
+/**
+ * Ativa o indicador "digitando..." via Evolution API
+ * @param {number} duracaoMs - quanto tempo manter o indicador ativo
+ */
+async function sendTyping(serverUrl, instance, apikey, telefone, duracaoMs = 2000) {
+  try {
+    await axios.post(
+      `${serverUrl}/chat/updatePresence/${instance}`,
+      { number: telefone, presence: 'composing' },
+      { headers: { apikey } }
+    );
+    log.debug('⌨️  Digitando ativado', { telefone, duracaoMs });
+
+    await new Promise((resolve) => setTimeout(resolve, duracaoMs));
+
+    // Para o "digitando" após o delay
+    await axios.post(
+      `${serverUrl}/chat/updatePresence/${instance}`,
+      { number: telefone, presence: 'paused' },
+      { headers: { apikey } }
+    ).catch(() => {}); // ignora erro ao pausar — não é crítico
+
+  } catch (err) {
+    // Não quebra o fluxo se o endpoint de presença falhar
+    log.debug('Presença não suportada ou erro ignorado', { error: err.message });
+  }
+}
+
+module.exports = { sendText, sendTyping };

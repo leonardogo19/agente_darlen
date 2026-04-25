@@ -2,7 +2,7 @@ const express = require('express');
 const config = require('./config');
 const { enqueue, cancel } = require('./services/debouncerService');
 const { getClientByPhone, createClient, updateClientSession, pauseClient, unpauseClient } = require('./services/supabaseService');
-const { sendText } = require('./services/whatsappService');
+const { sendText, sendTyping } = require('./services/whatsappService');
 const { runAgent } = require('./services/aiService');
 const { buildSystemPrompt } = require('./services/promptService');
 const { create } = require('./utils/logger');
@@ -235,14 +235,18 @@ async function processMessages(messages, telefoneCliente, sessionId, serverUrl, 
   for (let i = 0; i < partes.length; i++) {
     const parte = partes[i];
 
-    // Delay entre partes: ~60ms por caractere, mínimo 800ms, máximo 3000ms
-    if (i > 0) {
-      const delay = Math.min(Math.max(parte.length * 60, 800), 3000);
-      log.debug(`Aguardando ${delay}ms antes da parte ${i + 1}`, { telefoneCliente });
-      await new Promise((resolve) => setTimeout(resolve, delay));
-    }
+    // Calcula delay proporcional ao tamanho do texto (simula tempo de digitação)
+    // ~50ms por caractere, mínimo 800ms, máximo 3000ms
+    const typingMs = Math.min(Math.max(parte.length * 50, 800), 3000);
 
+    // Mostra "digitando..." pelo tempo calculado, depois envia
+    await sendTyping(serverUrl, nomeInstancia, apikey, telefoneCliente, typingMs);
     await sendText(serverUrl, nomeInstancia, apikey, telefoneCliente, parte);
+
+    // Pequena pausa entre partes para parecer mais natural
+    if (i < partes.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
   }
 
   log.info('Ciclo completo', {
