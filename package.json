@@ -4,8 +4,8 @@
   "description": "Agente WhatsApp - Darlen Portal Fitness",
   "main": "src/index.js",
   "engines": {
-    "node": "20.x"
-    },
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "start": "node src/index.js",
     "start:prod": "NODE_ENV=production node src/index.js",

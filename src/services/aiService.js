@@ -18,7 +18,13 @@ const tools = [
     type: 'function',
     function: {
       name: 'chamar_api_studio',
-      description: 'Chama a API principal do estúdio para agendamentos, alunos, professores, disponibilidade, etc.',
+      description: `Chama a API do estúdio. Regras de uso:
+- "alunos" GET: busca aluno. Use params.q com o telefone. Ex: { acao:"alunos", metodo:"GET", params:{ q:"5551..." } }
+- "verificar-disponibilidade": SEMPRE use corpo com inicio, fim (ISO -03:00), tipo_aula e aluno_id. Ex: { acao:"verificar-disponibilidade", corpo:{ inicio:"2026-04-28T10:00:00-03:00", fim:"2026-04-28T11:00:00-03:00", tipo_aula:"individual", aluno_id:"uuid" } }
+- "agendar": use corpo com aluno_id, professor_id, data_inicio (ISO -03:00), tipo_aula
+- "remarcar": use corpo com agendamento_antigo_id, novo_inicio (ISO -03:00), professor_id
+- "cancelar": use corpo com agendamento_id e motivo
+- NUNCA coloque inicio/fim/data_inicio em params — sempre em corpo`,
       parameters: {
         type: 'object',
         required: ['acao'],
@@ -119,9 +125,24 @@ async function executeTool(name, args, context) {
   let result;
   try {
     switch (name) {
-      case 'chamar_api_studio':
-        result = await chamarApiStudio(args);
+      case 'chamar_api_studio': {
+        // Correção automática: modelo às vezes manda inicio/fim em params em vez de corpo
+        const fixedArgs = { ...args };
+        if (fixedArgs.params) {
+          const camposCorporo = ['inicio', 'fim', 'data_inicio', 'novo_inicio', 'tipo_aula',
+            'aluno_id', 'professor_id', 'agendamento_id', 'agendamento_antigo_id', 'motivo'];
+          fixedArgs.corpo = fixedArgs.corpo || {};
+          for (const campo of camposCorporo) {
+            if (fixedArgs.params[campo] !== undefined) {
+              fixedArgs.corpo[campo] = fixedArgs.params[campo];
+              delete fixedArgs.params[campo];
+              log.warn(`⚠️  Campo "${campo}" movido de params para corpo`, { acao: fixedArgs.acao });
+            }
+          }
+        }
+        result = await chamarApiStudio(fixedArgs);
         break;
+      }
 
       case 'notificar_humano':
         log.warn('🔔 NOTIFICAR HUMANO solicitado', args);

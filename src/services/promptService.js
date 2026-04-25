@@ -5,7 +5,7 @@
 const SEP = '|||';
 
 function buildSystemPrompt(telefoneCliente) {
-  // Data/hora explícita no fuso de São Paulo para o modelo calcular corretamente
+  // Data/hora explícita no fuso de São Paulo
   const agora = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
 
   const diasSemana = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
@@ -15,36 +15,37 @@ function buildSystemPrompt(telefoneCliente) {
   const ano        = agora.getFullYear();
   const hora       = String(agora.getHours()).padStart(2, '0');
   const minuto     = String(agora.getMinutes()).padStart(2, '0');
+  const isoAgora   = `${ano}-${mes}-${dia}T${hora}:${minuto}:00-03:00`;
 
-  // ISO com offset -03:00 para o modelo usar em cálculos de datas
-  const isoAgora = `${ano}-${mes}-${dia}T${hora}:${minuto}:00-03:00`;
-
-  // Próxima terça-feira (para o agente saber qual data é "terça que vem")
-  const proximaTerca = new Date(agora);
-  const diffTerca = (2 - agora.getDay() + 7) % 7 || 7;
-  proximaTerca.setDate(agora.getDate() + diffTerca);
-  const proximaTercaStr = `${String(proximaTerca.getDate()).padStart(2,'0')}/${String(proximaTerca.getMonth()+1).padStart(2,'0')}/${proximaTerca.getFullYear()}`;
-
-  const proximaSegunda = new Date(agora);
-  const diffSeg = (1 - agora.getDay() + 7) % 7 || 7;
-  proximaSegunda.setDate(agora.getDate() + diffSeg);
-  const proximaSegundaStr = `${String(proximaSegunda.getDate()).padStart(2,'0')}/${String(proximaSegunda.getMonth()+1).padStart(2,'0')}/${proximaSegunda.getFullYear()}`;
+  // Calcula os próximos 7 dias para o modelo resolver qualquer dia da semana
+  const proximosDias = [];
+  for (let i = 1; i <= 7; i++) {
+    const d = new Date(agora);
+    d.setDate(agora.getDate() + i);
+    const dd  = String(d.getDate()).padStart(2, '0');
+    const mm  = String(d.getMonth() + 1).padStart(2, '0');
+    const aaaa = d.getFullYear();
+    const isoD = `${aaaa}-${mm}-${dd}`;
+    proximosDias.push(`- ${diasSemana[d.getDay()]} → ${dd}/${mm}/${aaaa} (ISO: ${isoD})`);
+  }
+  const tabelaDias = proximosDias.join('\n');
 
   return `# Assistente Virtual — Darlen Portal Fitness no Bruna Rossi Espaço de Saúde v13
 
 ## Data e hora atual (REFERÊNCIA OBRIGATÓRIA)
 
-- Agora: **${diaSemana}, ${dia}/${mes}/${ano} às ${hora}h${minuto}** (America/Sao_Paulo, UTC-3)
-- ISO atual: \`${isoAgora}\`
-- Próxima segunda-feira: ${proximaSegundaStr}
-- Próxima terça-feira: ${proximaTercaStr}
+Agora: ${diaSemana}, ${dia}/${mes}/${ano} às ${hora}h${minuto} (America/Sao_Paulo, UTC-3)
+ISO atual: ${isoAgora}
 
-Use estas datas para:
-1. Calcular se uma aula está a menos de 12 horas (compare o horário da aula com o ISO atual acima)
-2. Resolver "segunda que vem", "terça-feira" etc. para datas reais
-3. Todas as datas enviadas à API usam offset \`-03:00\`
+Próximos dias — use esta tabela para converter "segunda", "terça", etc. em datas reais:
+${tabelaDias}
 
-Nunca pergunte fuso ou localização ao aluno.
+Regras de data:
+- "segunda" = próxima segunda-feira da tabela acima
+- "semana que vem" = +7 dias a partir de hoje
+- Para agendar/remarcar: converta sempre para ISO com -03:00. Ex: 2026-04-28T10:00:00-03:00
+- Para verificar cancelamento com menos de 2h: compare ISO da aula com ISO atual acima
+- NUNCA invente datas — use sempre a tabela acima
 
 Contato do estúdio: **(51) 99322-1645**
 
