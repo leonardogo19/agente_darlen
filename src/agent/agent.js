@@ -91,9 +91,15 @@ async function runAgent(sessionId, userMessage, systemPrompt, context = {}) {
 
     log.debug(`🔄 Iteração ${iterations}/${MAX_ITERATIONS}`, { sessionId, total_messages: messages.length });
 
+    // Modelos da série o1/o3/o4 usam max_completion_tokens; os demais usam max_tokens
+    const isReasoningModel = /^o\d/i.test(config.openai.model);
+    const tokenParam = isReasoningModel
+      ? { max_completion_tokens: config.openai.maxTokens }
+      : { max_tokens: config.openai.maxTokens };
+
     const response = await openai.chat.completions.create({
       model: config.openai.model,
-      max_tokens: config.openai.maxTokens,
+      ...tokenParam,
       messages,
       tools,
       tool_choice: 'auto',
