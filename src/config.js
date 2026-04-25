@@ -9,16 +9,10 @@ module.exports = {
     maxTokens: parseInt(process.env.OPENAI_MAX_TOKENS) || 8000,
   },
 
-  redis: {
-    url: process.env.REDIS_URL || 'redis://localhost:6379',
-  },
-
   supabase: {
     url: process.env.SUPABASE_URL,
     key: process.env.SUPABASE_KEY,
   },
-
-  postgres: null, // não usado — memória do chat vai para o Supabase
 
   studio: {
     apiUrl: process.env.STUDIO_API_URL,

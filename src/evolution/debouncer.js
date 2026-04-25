@@ -81,7 +81,6 @@ function enqueue(telefone, messageData, delaySeconds, onFlush) {
         const flushPendente = entry.onFlush;
         entry.messages = [];
 
-        // Remove o estado se não houver mais nada
         if (!state.has(telefone)) return;
         state.delete(telefone);
 

@@ -1,7 +1,7 @@
 /**
  * Gera o system prompt do agente com os dados do contexto
  */
- 
+
 const SEP = '|||';
 
 function buildSystemPrompt(telefoneCliente) {

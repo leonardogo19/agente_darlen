@@ -66,7 +66,7 @@ async function updateClientSession(id, sessionId, idMensagem, telefone) {
 }
 
 /**
- * Pausa o atendimento do aluno por X horas (padrão: 3h)
+ * Pausa o atendimento do aluno por X horas (padrão: 2h)
  */
 async function pauseClient(id, horas = 2) {
   const now = new Date();

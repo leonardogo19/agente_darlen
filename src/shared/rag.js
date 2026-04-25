@@ -1,14 +1,13 @@
 const { createClient } = require('@supabase/supabase-js');
 const OpenAI = require('openai');
 const config = require('../config');
+const { cleanMarkdown } = require('./cleanText');
 const { create } = require('../utils/logger');
 
 const log = create('RAG');
 const supabase = createClient(config.supabase.url, config.supabase.key);
 const openai = new OpenAI({ apiKey: config.openai.apiKey });
 
-// Nome da tabela e função RPC do Vector Store no Supabase
-// Ajuste conforme o nome que aparece no seu painel do Supabase
 const VECTOR_TABLE    = process.env.RAG_TABLE    || 'documents';
 const MATCH_FUNCTION  = process.env.RAG_FUNCTION || 'match_documents';
 const MATCH_COUNT     = parseInt(process.env.RAG_MATCH_COUNT) || 5;
@@ -17,7 +16,7 @@ const MATCH_THRESHOLD = parseFloat(process.env.RAG_THRESHOLD) || 0.5;
 /**
  * Busca informações no Supabase Vector Store via similaridade semântica
  * @param {string} query - Termos de busca
- * @returns {string} Texto com os resultados encontrados
+ * @returns {string|null} Texto com os resultados encontrados
  */
 async function buscarInfo(query) {
   log.info('🔍 Buscando no RAG', { query, table: VECTOR_TABLE, function: MATCH_FUNCTION });
@@ -56,8 +55,6 @@ async function buscarInfo(query) {
     });
 
     // 3. Limpa markdown e concatena os conteúdos encontrados
-    const { cleanMarkdown } = require('../utils/cleanText');
-
     const resultado = data
       .map((doc) => {
         const raw = doc.content || doc.text || doc.pageContent || '';

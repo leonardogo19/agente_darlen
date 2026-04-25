@@ -7,8 +7,8 @@
  */
 
 const express = require('express');
-const { getClientByPhone, pauseClient, unpauseClient } = require('../services/supabaseService');
-const { cancel } = require('../services/debouncerService');
+const { getClientByPhone, pauseClient, unpauseClient } = require('../shared/supabase');
+const { cancel } = require('../evolution/debouncer');
 const config = require('../config');
 const { create } = require('../utils/logger');
 
@@ -32,9 +32,7 @@ router.post('/pause', async (req, res) => {
 
     const client = clients[0];
 
-    // Cancela mensagens pendentes no debouncer
     cancel(telefone);
-
     await pauseClient(client.id, horas);
 
     log.warn('Agente pausado via API', { telefone, id: client.id, horas });
@@ -98,8 +96,6 @@ router.get('/status', async (req, res) => {
     const client = clients[0];
     const agora = new Date();
     const pausaFim = client.pausa_fim ? new Date(client.pausa_fim) : null;
-
-    // Pausa pode ter expirado — verifica pelo horário
     const pausaAtiva = client.pausado === true && pausaFim && pausaFim > agora;
 
     return res.json({

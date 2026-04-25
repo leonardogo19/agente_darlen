@@ -1,12 +1,12 @@
 const express = require('express');
-const config = require('./config');
-const { enqueue, cancel } = require('./services/debouncerService');
-const { getClientByPhone, createClient, updateClientSession, pauseClient, unpauseClient } = require('./services/supabaseService');
-const { sendText, sendTyping } = require('./services/whatsappService');
-const { runAgent } = require('./services/aiService');
-const { buildSystemPrompt } = require('./services/promptService');
-const { create } = require('./utils/logger');
-const { cleanMarkdown } = require('./utils/cleanText');
+const config = require('../config');
+const { enqueue, cancel } = require('./debouncer');
+const { getClientByPhone, createClient, updateClientSession, pauseClient, unpauseClient } = require('../shared/supabase');
+const { sendText, sendTyping } = require('./sender');
+const { runAgent } = require('../agent/agent');
+const { buildSystemPrompt } = require('../agent/prompt');
+const { create } = require('../utils/logger');
+const { cleanMarkdown } = require('../shared/cleanText');
 const { v4: uuidv4 } = require('uuid');
 
 const log = create('Webhook');
@@ -15,7 +15,7 @@ const router = express.Router();
 router.post('/', async (req, res) => {
   res.status(200).json({ ok: true });
 
-  const requestId = uuidv4().slice(0, 8); // ID curto para rastrear o request nos logs
+  const requestId = uuidv4().slice(0, 8);
   log.info('Webhook recebido', {
     requestId,
     event: req.body?.event,
@@ -54,13 +54,11 @@ async function processWebhook(body, requestId) {
   });
 
   // ── 2. Ignora mensagens enviadas pelo próprio bot ──────────────────────────
-  // A Evolution pode mandar fromMe=true OU o remoteJid igual ao sender (número da instância)
   if (body?.data?.key?.fromMe === true) {
     log.debug('Ignorando mensagem própria (fromMe=true)', { requestId, telefoneCliente });
     return;
   }
 
-  // Ignora também se o telefone do cliente for igual ao número da instância (bot respondendo)
   const senderNumber = body?.sender?.replace(/\D/g, '');
   const clientNumber = campos.telefoneCliente?.replace(/\D/g, '').replace(/@.*/, '');
   if (senderNumber && clientNumber && senderNumber === clientNumber) {
@@ -68,15 +66,13 @@ async function processWebhook(body, requestId) {
     return;
   }
 
-  // ── 3. Processa apenas eventos de mensagem nova (MESSAGES_UPSERT)
-  //       Ignora delivery, read receipts, etc.
+  // ── 3. Processa apenas eventos de mensagem nova (MESSAGES_UPSERT) ─────────
   const event = body?.event;
   if (event && event !== 'messages.upsert') {
     log.debug('Ignorando evento não relevante', { requestId, event, telefoneCliente });
     return;
   }
 
-  // Fallback: se não vier o campo event, filtra por status conhecido de não-mensagem
   if (!event && body?.data?.status === 'DELIVERY_ACK') {
     log.debug('Ignorando DELIVERY_ACK', { requestId, telefoneCliente });
     return;
@@ -119,7 +115,6 @@ async function processWebhook(body, requestId) {
     });
 
     if (clientRecord.pausado === true) {
-      // Verifica se a pausa já expirou
       const pausaFim = clientRecord.pausa_fim ? new Date(clientRecord.pausa_fim) : null;
       if (pausaFim && pausaFim <= new Date()) {
         log.info('Pausa expirada — retomando atendimento automaticamente', {
@@ -160,7 +155,6 @@ async function processWebhook(body, requestId) {
   if (tipoMensagem === 'audioMessage') {
     messageText = body?.data?.message?.speechToText;
     if (!messageText) {
-      // Áudio sem transcrição — avisa o usuário
       log.warn('Áudio sem speechToText — pedindo para reenviar', { requestId, telefoneCliente });
       await sendText(serverUrl, nomeInstancia, apikey, telefoneCliente,
         'Não consegui ouvir seu áudio. Pode digitar sua mensagem?');
@@ -178,7 +172,6 @@ async function processWebhook(body, requestId) {
   // ── 8. Debouncer em memória ───────────────────────────────────────────────
   log.debug('Enfileirando no debouncer', { requestId, telefoneCliente, sessionId });
 
-  // Contexto de envio sempre atualizado — o onFlush usa o da mensagem mais recente
   enqueue(
     telefoneCliente,
     { message: messageText, timestamp: new Date().toISOString(), message_id: idMensagem },
@@ -220,7 +213,6 @@ async function processMessages(messages, telefoneCliente, sessionId, serverUrl, 
     return;
   }
 
-  // Divide a resposta em partes pelo separador |||
   const partes = response
     .split('|||')
     .map((p) => cleanMarkdown(p))
@@ -234,16 +226,11 @@ async function processMessages(messages, telefoneCliente, sessionId, serverUrl, 
 
   for (let i = 0; i < partes.length; i++) {
     const parte = partes[i];
-
-    // Calcula delay proporcional ao tamanho do texto (simula tempo de digitação)
-    // ~50ms por caractere, mínimo 800ms, máximo 3000ms
     const typingMs = Math.min(Math.max(parte.length * 50, 800), 3000);
 
-    // Mostra "digitando..." pelo tempo calculado, depois envia
     await sendTyping(serverUrl, nomeInstancia, apikey, telefoneCliente, typingMs);
     await sendText(serverUrl, nomeInstancia, apikey, telefoneCliente, parte);
 
-    // Pequena pausa entre partes para parecer mais natural
     if (i < partes.length - 1) {
       await new Promise((resolve) => setTimeout(resolve, 300));
     }
