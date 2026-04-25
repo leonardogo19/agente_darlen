@@ -210,7 +210,10 @@ async function processMessages(messages, telefoneCliente, sessionId, serverUrl, 
   });
 
   const systemPrompt = buildSystemPrompt(telefoneCliente);
-  const response = await runAgent(sessionId, combinedMessage, systemPrompt, { telefoneCliente });
+  const response = await runAgent(sessionId, combinedMessage, systemPrompt, {
+    telefoneCliente,
+    wpp: { serverUrl, nomeInstancia, apikey },
+  });
 
   if (!response) {
     log.warn('Agente retornou resposta vazia', { telefoneCliente, sessionId });

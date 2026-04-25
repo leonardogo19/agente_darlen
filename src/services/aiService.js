@@ -3,6 +3,8 @@ const config = require('../config');
 const { chamarApiStudio } = require('./studioApiService');
 const { saveMessage, getHistory } = require('./memoryService');
 const { buscarInfo } = require('./ragService');
+const { notificarHumano } = require('./notificarHumanoService');
+const { enviarMidia } = require('./enviarMidiaService');
 const { create } = require('../utils/logger');
 
 const log = create('AI');
@@ -122,9 +124,8 @@ async function executeTool(name, args, context) {
         break;
 
       case 'notificar_humano':
-        // TODO: integre com seu sistema (webhook, email, Slack, etc.)
-    log.warn('🔔 NOTIFICAR HUMANO solicitado', args);
-        result = { sucesso: true, mensagem: 'Atendente notificado.' };
+        log.warn('🔔 NOTIFICAR HUMANO solicitado', args);
+        result = await notificarHumano(args, context.wpp || {});
         break;
 
       case 'buscar_info': {
@@ -142,9 +143,8 @@ async function executeTool(name, args, context) {
       }
 
       case 'enviar_midia':
-        // TODO: integre com seu sistema de envio de mídia
-        log.info('ENVIAR MÍDIA', args);
-        result = { sucesso: true };
+        log.info('📸 ENVIAR MÍDIA', args);
+        result = await enviarMidia(args, context.wpp || {});
         break;
 
       default:

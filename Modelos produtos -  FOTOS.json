@@ -1,0 +1,359 @@
+{
+  "name": "Modelos produtos -  FOTOS",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "a5b4fd05-b2f2-4dee-a813-3be5e9d3126a",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        1328,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "817f12c4-7d2a-45bd-8c12-74ab0c196308",
+              "name": "response",
+              "value": "=enviado as fotos",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d179daff-cf23-4949-8475-51ff72a91698",
+      "name": "Resposta para o Agente",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2624,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "galeria_fotos",
+        "returnAll": true,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "estudio_id",
+              "condition": "eq",
+              "keyValue": "a18dee00-4328-4b6d-9e2f-83ede86b65d5"
+            },
+            {
+              "keyName": "categoria",
+              "condition": "eq",
+              "keyValue": "={{ $json.categoria }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        0
+      ],
+      "id": "ae2c3829-72b1-4c99-9cc7-ae0e040d9330",
+      "name": "Get many rows",
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "A1n5iJc6htbQvUPI",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\n// verifica se realmente tem dados válidos\nconst temDados = items.some(item => Object.keys(item.json).length > 0);\n\nif (!temDados) {\n  return [\n    {\n      json: {\n        vazio: true,\n        mensagem: \"Nenhum registro encontrado, revise a query\"\n      }\n    }\n  ];\n}\n\n// número entre 1 e 3\nconst quantidade = Math.floor(Math.random() * 3) + 1;\n\n// embaralha\nconst embaralhados = [...items].sort(() => Math.random() - 0.5);\n\n// pega quantidade sorteada\nconst selecionados = embaralhados.slice(0, quantidade);\n\n// adiciona delay\nconst resultado = selecionados.map(item => {\n  const delay = Math.floor(Math.random() * 10) + 1;\n\n  return {\n    json: {\n      ...item.json,\n      vazio: false,\n      delay_segundos: delay,\n    }\n  };\n});\n\nreturn resultado;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1968,
+        0
+      ],
+      "id": "00b1f60e-9c8e-47d0-90b5-c305dd94c004",
+      "name": "aleatorizar"
+    },
+    {
+      "parameters": {
+        "jsCode": "const entradas = $input.all();\n\nfunction normalizar(texto) {\n  return texto\n    .toLowerCase()\n    .normalize(\"NFD\")\n    .replace(/[\\u0300-\\u036f]/g, \"\");\n}\n\nfunction padronizar(query) {\n  const q = normalizar(query);\n\n  if (q.includes(\"equip\")) return \"equipamentos\";\n  if (q.includes(\"aula\")) return \"aulas\";\n  if (q.includes(\"estudio\") || q.includes(\"studio\")) return \"estudio\";\n\n  return q;\n}\n\nreturn entradas.map(item => {\n\n  let dados = item.json.query || {};\n\n  // se vier como string JSON\n  if (typeof dados === \"string\") {\n    try {\n      dados = JSON.parse(dados);\n    } catch (e) {\n      dados = {};\n    }\n  }\n\n  const categoriaPadrao = padronizar(dados.categoria || \"\");\n\n  return {\n    json: {\n      categoria: categoriaPadrao,\n      telefone: dados.telefone || null,\n      whatsapp: {\n        evo: {\n          nomeInstancia: \"TESTE\",\n          apikey: \"1D8463A03C78-4E4D-BECC-65F8DB4C9B2A\",\n          server_url: \"https://pilates-evolution-api.cydx61.easypanel.host\"\n        }\n      }\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1552,
+        0
+      ],
+      "id": "6b09c6f5-1786-4d5a-b162-b011692b6619",
+      "name": "padronizar"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "817f12c4-7d2a-45bd-8c12-74ab0c196308",
+              "name": "response",
+              "value": "={{ $json.mensagem }}:{{ $('Execute Workflow Trigger').item.json.query }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8b20e4ad-5fe7-4972-9ac2-5cb7d6d7228a",
+      "name": "Resposta para o Agente3",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2416,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "31a050ba-c8a9-46ba-be96-fcd0967e68d5",
+              "leftValue": "={{ $json.vazio }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2160,
+        0
+      ],
+      "id": "de0f373b-03a0-40f5-95bd-8ff5e2019440",
+      "name": "validacao de dados"
+    },
+    {
+      "parameters": {
+        "options": {
+          "reset": "={{ $json.isSecondRun }}"
+        }
+      },
+      "id": "b3bdeb90-debb-49e7-ab42-187f29a1fb84",
+      "name": "looping pelas fotos",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2416,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.delay_segundos }}"
+      },
+      "id": "7747e50d-40d5-4002-a7cc-73b6c224170b",
+      "name": "delay",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2624,
+        -48
+      ],
+      "webhookId": "2af3c9a3-9a52-4195-9a23-1d24d6fd0655"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('padronizar').first().json.whatsapp.evo.server_url }}/message/sendMedia/{{ $('padronizar').first().json.whatsapp.evo.nomeInstancia }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $('padronizar').first().json.whatsapp.evo.apikey }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "number",
+              "value": "={{ $('padronizar').first().json.telefone }}"
+            },
+            {
+              "name": "mediatype",
+              "value": "=image"
+            },
+            {
+              "name": "mimetype",
+              "value": "image/png"
+            },
+            {
+              "name": "media",
+              "value": "={{ $json.url }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3ae9e9a2-0e12-4bfc-a021-1a60249c4823",
+      "name": "envio fotos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2816,
+        -48
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 3500
+    }
+  ],
+  "pinData": {
+    "Execute Workflow Trigger": [
+      {
+        "json": {
+          "query": "{\"categoria\":\"equipamento\",\"telefone\":\"5551995009663\"}"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "padronizar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get many rows": {
+      "main": [
+        [
+          {
+            "node": "aleatorizar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "aleatorizar": {
+      "main": [
+        [
+          {
+            "node": "validacao de dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "padronizar": {
+      "main": [
+        [
+          {
+            "node": "Get many rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validacao de dados": {
+      "main": [
+        [
+          {
+            "node": "looping pelas fotos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resposta para o Agente3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "looping pelas fotos": {
+      "main": [
+        [
+          {
+            "node": "Resposta para o Agente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "delay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "delay": {
+      "main": [
+        [
+          {
+            "node": "envio fotos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "envio fotos": {
+      "main": [
+        [
+          {
+            "node": "looping pelas fotos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "0696b580-edd9-425a-981e-ce23f1016fd7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8dcaa24d5617fd355e6173f679c6e6caa490313118e59aa269a215b14c92ede3"
+  },
+  "id": "qVTwz6AjkfOxabaA",
+  "tags": []
+}
