@@ -91,11 +91,12 @@ async function runAgent(sessionId, userMessage, systemPrompt, context = {}) {
 
     log.debug(`🔄 Iteração ${iterations}/${MAX_ITERATIONS}`, { sessionId, total_messages: messages.length });
 
-    // Modelos da série o1/o3/o4 usam max_completion_tokens; os demais usam max_tokens
-    const isReasoningModel = /^o\d/i.test(config.openai.model);
-    const tokenParam = isReasoningModel
-      ? { max_completion_tokens: config.openai.maxTokens }
-      : { max_tokens: config.openai.maxTokens };
+    // Modelos legados (gpt-3.5-*, gpt-4, gpt-4-*, gpt-4o clássico) usam max_tokens.
+    // Modelos novos (gpt-4o-mini 2024+, gpt-5*, o1, o3, o4, etc.) usam max_completion_tokens.
+    const isLegacyModel = /^gpt-(3\.5|4(?!o-mini|-mini|-5|-turbo-preview|-vision|-0125|-1106|-32k|-0613|-0314|-4-0314|-4-0613|-4-32k))/i.test(config.openai.model);
+    const tokenParam = isLegacyModel
+      ? { max_tokens: config.openai.maxTokens }
+      : { max_completion_tokens: config.openai.maxTokens };
 
     const response = await openai.chat.completions.create({
       model: config.openai.model,
