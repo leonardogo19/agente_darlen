@@ -9,6 +9,8 @@ const webhookRouter = require('./webhook');
 const agentControlRouter = require('./routes/agentControl');
 const { create } = require('./utils/logger');
 
+const { version } = require('../package.json');
+
 const log = create('Server');
 const app = express();
 
@@ -16,7 +18,13 @@ app.use(express.json({ limit: '10mb' }));
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), uptime: process.uptime() });
+  res.json({
+    status: 'ok',
+    version,
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    env: process.env.NODE_ENV || 'development',
+  });
 });
 
 // Webhook principal
