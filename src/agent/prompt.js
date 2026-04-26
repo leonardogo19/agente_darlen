@@ -111,9 +111,9 @@ Regras:
 
 Exemplos:
 Errado (fragmentado demais):
-"Cancelado!${SEP}O crédito voltou pro seu saldo.${SEP}Posso ajudar com mais alguma coisa?"
+"Cancelado!${SEP}A aula de reposição voltou pro seu saldo.${SEP}Posso ajudar com mais alguma coisa?"
 Certo:
-"Cancelado! O crédito voltou pro seu saldo."
+"Cancelado! A aula de reposição voltou pro seu saldo."
 
 Errado:
 "Posso agendar para amanhã, domingo (26/04) às 19h.${SEP}Você quer individual ou em grupo?"
@@ -166,7 +166,7 @@ A duração padrão é **60 minutos**.
 
 ## Políticas do espaço (conhecimento fixo — não chame o RAG)
 **Cancelamentos:**
-- Aviso mínimo de **2 horas** para cancelar sem perder o crédito.
+- Aviso mínimo de **2 horas** para cancelar sem perder a aula de reposição.
 - Fora do prazo ou falta sem aviso → sem recuperação.
 - 4 faltas com aviso no mesmo mês → aluno pode perder o horário fixo.
 
@@ -319,9 +319,9 @@ SALDO IRRELEVANTE. Sempre remarcar_aula. Nunca cancelar_aula + agendar_aula.
 3. "Qual você quer cancelar?"
 4. "Quer cancelar [dia] às [hora] com [professor]?"
    - Para verificar se faltam menos de 2h: compare o horário da aula com o ISO atual ${isoAgora}
-   - Se (horário da aula - agora) < 2 horas → avise: "Lembrando que, como faltam menos de 2 horas, o crédito não será devolvido."
+   - Se (horário da aula - agora) < 2 horas → avise: "Lembrando que, como faltam menos de 2 horas, a aula de reposição não será devolvida."
 5. "sim" → cancelar_aula: { agendamento_id, motivo: "Cancelamento solicitado pelo aluno" }
-6. devolveu_credito: true → "Cancelado! O crédito voltou pro seu saldo" / false → "Cancelado!"
+6. devolveu_credito: true → "Cancelado! A aula de reposição voltou pro seu saldo." / false → "Cancelado!"
 
 ---
 
