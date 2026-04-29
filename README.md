@@ -4,7 +4,7 @@ Conversão do workflow n8n para Node.js puro.
 
 ## Estrutura
 
-
+```
 whatsapp-agent/
 ├── src/
 │   ├── index.js                    # Servidor Express
@@ -20,11 +20,11 @@ whatsapp-agent/
 │       └── studioApiService.js     # API principal do estúdio
 ├── .env.example
 └── package.json
-
+```
 
 ## Fluxo equivalente ao n8n
 
-
+```
 Webhook recebido
   → Extrai campos (telefone, mensagem, tipo, instância, etc.)
   → Ignora fromMe=true
@@ -38,17 +38,17 @@ Webhook recebido
   → Agrupa todas as mensagens acumuladas
   → Executa agente OpenAI com tools + memória PostgreSQL
   → Envia resposta via Evolution API
-
+```
 
 ## Instalação
 
-bash
+```bash
 cd whatsapp-agent
 npm install
 cp .env.example .env
 # Edite o .env com suas credenciais
 npm start
-
+```
 
 ## Variáveis de ambiente
 
