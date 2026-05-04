@@ -111,23 +111,24 @@ const professorToolDefinitions = [
 
 // telefoneCliente é injetado pelo agent.js via context
 async function executeProfessorTool(name, args, context) {
-    const telefone = context?.telefoneCliente || '';
+    const telefone   = context?.telefoneCliente || '';
+    const professorId = context?.professor?.id  || '';
 
     switch (name) {
         case 'agenda_dia':
-            return chamarApiStudio({ acao: 'professor', metodo: 'POST', corpo: { acao: 'agenda_dia', telefone, data: args.data } });
+            return chamarApiStudio({ acao: 'professor', metodo: 'POST', corpo: { acao: 'agenda_dia', telefone, professor_id: professorId, data: args.data } });
         case 'agenda_semana':
-            return chamarApiStudio({ acao: 'professor', metodo: 'POST', corpo: { acao: 'agenda_semana', telefone, data: args.data } });
+            return chamarApiStudio({ acao: 'professor', metodo: 'POST', corpo: { acao: 'agenda_semana', telefone, professor_id: professorId, data: args.data } });
         case 'ver_aluno':
-            return chamarApiStudio({ acao: 'professor', metodo: 'POST', corpo: { acao: 'buscar_aluno', telefone, aluno_id: args.aluno_id, q: args.q } });
+            return chamarApiStudio({ acao: 'professor', metodo: 'POST', corpo: { acao: 'buscar_aluno', telefone, professor_id: professorId, aluno_id: args.aluno_id, q: args.q } });
         case 'agendar_para_aluno':
-            return chamarApiStudio({ acao: 'professor', metodo: 'POST', corpo: { acao: 'agendar_para_aluno', telefone, aluno_id: args.aluno_id, data_inicio: args.data_inicio, tipo_aula: args.tipo_aula || 'aula', observacoes: args.observacoes } });
+            return chamarApiStudio({ acao: 'professor', metodo: 'POST', corpo: { acao: 'agendar_para_aluno', telefone, professor_id: professorId, aluno_id: args.aluno_id, data_inicio: args.data_inicio, tipo_aula: args.tipo_aula || 'aula', observacoes: args.observacoes } });
         case 'cancelar_aula':
-            return chamarApiStudio({ acao: 'professor', metodo: 'POST', corpo: { acao: 'cancelar_aula', telefone, agendamento_id: args.agendamento_id, motivo: args.motivo || 'Cancelado pelo professor' } });
+            return chamarApiStudio({ acao: 'professor', metodo: 'POST', corpo: { acao: 'cancelar_aula', telefone, professor_id: professorId, agendamento_id: args.agendamento_id, motivo: args.motivo || 'Cancelado pelo professor' } });
         case 'bloquear_horario':
-            return chamarApiStudio({ acao: 'professor', metodo: 'POST', corpo: { acao: 'bloquear_horario', telefone, data_inicio: args.data_inicio, data_fim: args.data_fim, motivo: args.motivo } });
+            return chamarApiStudio({ acao: 'professor', metodo: 'POST', corpo: { acao: 'bloquear_horario', telefone, professor_id: professorId, data_inicio: args.data_inicio, data_fim: args.data_fim, motivo: args.motivo } });
         case 'desbloquear_horario':
-            return chamarApiStudio({ acao: 'professor', metodo: 'POST', corpo: { acao: 'desbloquear_horario', telefone, bloqueio_id: args.bloqueio_id } });
+            return chamarApiStudio({ acao: 'professor', metodo: 'POST', corpo: { acao: 'desbloquear_horario', telefone, professor_id: professorId, bloqueio_id: args.bloqueio_id } });
         default:
             return null;
     }
