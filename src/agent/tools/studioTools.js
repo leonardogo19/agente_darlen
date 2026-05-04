@@ -121,6 +121,133 @@ const studioToolDefinitions = [
             },
         },
     },
+    // ─── Tools exclusivas para professores ──────────────────────────────────
+    {
+        type: 'function',
+        function: {
+            name: 'identificar_professor',
+            description: 'Verifica se o telefone pertence a um professor cadastrado. Chame SEMPRE no início quando o contexto indicar que pode ser professor.',
+            parameters: {
+                type: 'object',
+                required: ['telefone'],
+                properties: {
+                    telefone: { type: 'string', description: 'Telefone do contato' },
+                },
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'agenda_dia_professor',
+            description: 'Retorna a agenda do professor para o dia especificado.',
+            parameters: {
+                type: 'object',
+                required: ['professor_id'],
+                properties: {
+                    professor_id: { type: 'string', description: 'UUID do professor' },
+                    data: { type: 'string', description: 'Data em ISO 8601. Se omitido, usa hoje.' },
+                },
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'agenda_semana_professor',
+            description: 'Retorna a agenda do professor para a semana inteira.',
+            parameters: {
+                type: 'object',
+                required: ['professor_id'],
+                properties: {
+                    professor_id: { type: 'string', description: 'UUID do professor' },
+                    data: { type: 'string', description: 'Qualquer data da semana em ISO 8601. Se omitido, usa a semana atual.' },
+                },
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'buscar_aluno_professor',
+            description: 'Busca informações de um aluno específico para o professor ver (próximas aulas, histórico, saldo).',
+            parameters: {
+                type: 'object',
+                required: ['professor_id'],
+                properties: {
+                    professor_id: { type: 'string', description: 'UUID do professor' },
+                    aluno_id: { type: 'string', description: 'UUID do aluno (se já conhecido)' },
+                    q: { type: 'string', description: 'Nome ou telefone do aluno para busca' },
+                },
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'bloquear_horario_professor',
+            description: 'Bloqueia um horário na agenda do professor (ex: folga, compromisso pessoal). Impede novos agendamentos nesse período.',
+            parameters: {
+                type: 'object',
+                required: ['professor_id', 'data_inicio', 'data_fim'],
+                properties: {
+                    professor_id: { type: 'string', description: 'UUID do professor' },
+                    data_inicio: { type: 'string', description: 'Início do bloqueio em ISO 8601 com -03:00' },
+                    data_fim: { type: 'string', description: 'Fim do bloqueio em ISO 8601 com -03:00' },
+                    motivo: { type: 'string', description: 'Motivo do bloqueio (opcional)' },
+                },
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'desbloquear_horario_professor',
+            description: 'Remove um bloqueio de horário da agenda do professor.',
+            parameters: {
+                type: 'object',
+                required: ['professor_id', 'bloqueio_id'],
+                properties: {
+                    professor_id: { type: 'string', description: 'UUID do professor' },
+                    bloqueio_id: { type: 'string', description: 'ID do bloqueio a remover' },
+                },
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'agendar_aula_professor',
+            description: 'Professor agenda uma aula para um aluno.',
+            parameters: {
+                type: 'object',
+                required: ['professor_id', 'aluno_id', 'data_inicio'],
+                properties: {
+                    professor_id: { type: 'string', description: 'UUID do professor' },
+                    aluno_id: { type: 'string', description: 'UUID do aluno' },
+                    data_inicio: { type: 'string', description: 'Data e hora em ISO 8601 com -03:00' },
+                    tipo_aula: { type: 'string', enum: ['aula', 'experimental'], description: 'Tipo da aula' },
+                    observacoes: { type: 'string' },
+                },
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'cancelar_aula_professor',
+            description: 'Professor cancela uma aula da sua agenda.',
+            parameters: {
+                type: 'object',
+                required: ['professor_id', 'agendamento_id'],
+                properties: {
+                    professor_id: { type: 'string', description: 'UUID do professor' },
+                    agendamento_id: { type: 'string', description: 'ID do agendamento a cancelar' },
+                    motivo: { type: 'string', description: 'Motivo do cancelamento' },
+                },
+            },
+        },
+    },
 ];
 
 // ─── Execução das tools de estúdio ──────────────────────────────────────────
@@ -145,6 +272,23 @@ async function executeStudioTool(name, args) {
             return chamarApiStudio({ acao: 'professores', metodo: 'GET' });
         case 'listar_pacotes':
             return chamarApiStudio({ acao: 'listar-pacotes', metodo: 'GET' });
+        // ─── Tools de professor ──────────────────────────────────────────────
+        case 'identificar_professor':
+            return chamarApiStudio({ acao: 'professor', metodo: 'POST', corpo: { acao: 'identificar', telefone: args.telefone } });
+        case 'agenda_dia_professor':
+            return chamarApiStudio({ acao: 'professor', metodo: 'POST', corpo: { acao: 'agenda_dia', professor_id: args.professor_id, data: args.data } });
+        case 'agenda_semana_professor':
+            return chamarApiStudio({ acao: 'professor', metodo: 'POST', corpo: { acao: 'agenda_semana', professor_id: args.professor_id, data: args.data } });
+        case 'buscar_aluno_professor':
+            return chamarApiStudio({ acao: 'professor', metodo: 'POST', corpo: { acao: 'buscar_aluno', professor_id: args.professor_id, aluno_id: args.aluno_id, q: args.q } });
+        case 'bloquear_horario_professor':
+            return chamarApiStudio({ acao: 'professor', metodo: 'POST', corpo: { acao: 'bloquear_horario', professor_id: args.professor_id, data_inicio: args.data_inicio, data_fim: args.data_fim, motivo: args.motivo } });
+        case 'desbloquear_horario_professor':
+            return chamarApiStudio({ acao: 'professor', metodo: 'POST', corpo: { acao: 'desbloquear_horario', professor_id: args.professor_id, bloqueio_id: args.bloqueio_id } });
+        case 'agendar_aula_professor':
+            return chamarApiStudio({ acao: 'professor', metodo: 'POST', corpo: { acao: 'agendar_para_aluno', professor_id: args.professor_id, aluno_id: args.aluno_id, data_inicio: args.data_inicio, tipo_aula: args.tipo_aula || 'aula', observacoes: args.observacoes } });
+        case 'cancelar_aula_professor':
+            return chamarApiStudio({ acao: 'professor', metodo: 'POST', corpo: { acao: 'cancelar_aula', professor_id: args.professor_id, agendamento_id: args.agendamento_id, motivo: args.motivo } });
         default:
             return null; // não é uma tool de estúdio
     }
