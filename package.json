@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-agent",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Agente WhatsApp - Darlen Portal Fitness",
   "main": "src/index.js",
   "engines": {
