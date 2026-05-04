@@ -1,56 +1,80 @@
 const OpenAI = require('openai');
 const config = require('../config');
 const { saveMessage, getHistory } = require('./memory');
-const { studioToolDefinitions, executeStudioTool, studioToolNames } = require('./tools/studioTools');
+
+// ─── Tools por modo ───────────────────────────────────────────────────────────
+const { alunoToolDefinitions, executeAlunoTool, alunoToolNames } = require('./tools/alunoTools');
+const { professorToolDefinitions, executeProfessorTool, professorToolNames } = require('./tools/professorTools');
+
+// ─── Tools auxiliares (usadas em ambos os modos) ──────────────────────────────
 const { ragToolDefinition, executeRagTool } = require('./tools/ragTool');
 const { humanToolDefinition, executeHumanTool } = require('./tools/humanTool');
 const { mediaToolDefinition, executeMediaTool } = require('./tools/mediaTool');
+
 const { create } = require('../utils/logger');
 
 const log = create('AI');
 const openai = new OpenAI({ apiKey: config.openai.apiKey });
 
-// ─── Todas as tools disponíveis ──────────────────────────────────────────────
+// ─── Conjuntos de tools por modo ─────────────────────────────────────────────
 
-const tools = [
-  ...studioToolDefinitions,
-  ragToolDefinition,
-  humanToolDefinition,
-  mediaToolDefinition,
+const toolsAluno = [
+  ...alunoToolDefinitions,
+  // buscar_info, notificar_humano e enviar_midia já estão em alunoToolDefinitions
 ];
 
-// ─── Execução das tools ──────────────────────────────────────────────────────
+const toolsProfessor = [
+  ...professorToolDefinitions,
+  // Professores não precisam de RAG, notificar_humano ou enviar_midia
+];
 
-async function executeTool(name, args, context) {
+// ─── Execução das tools ───────────────────────────────────────────────────────
+
+async function executeTool(name, args, context, modo) {
   const start = Date.now();
-  log.info('⚡ Executando tool', { tool: name, args });
+  log.info('⚡ Executando tool', { tool: name, args, modo });
 
   let result;
   try {
-    // Tools de estúdio
-    if (studioToolNames.includes(name)) {
-      result = await executeStudioTool(name, args);
-    } else {
-      switch (name) {
-        case 'buscar_info':
-          log.info('🔍 BUSCAR INFO (RAG)', { query: args.query });
-          result = await executeRagTool(args);
-          break;
-
-        case 'notificar_humano':
-          log.warn('🔔 NOTIFICAR HUMANO', args);
-          result = await executeHumanTool(args, context);
-          break;
-
-        case 'enviar_midia':
-          log.info('📸 ENVIAR MÍDIA', args);
-          result = await executeMediaTool(args, context);
-          break;
-
-        default:
-          log.warn('Tool desconhecida', { tool: name });
-          result = { erro: `Tool desconhecida: ${name}` };
+    if (modo === 'professor') {
+      // Tools do professor
+      result = await executeProfessorTool(name, args);
+      if (result !== null) {
+        log.info('✔️  Tool professor concluída', { tool: name, elapsed_ms: Date.now() - start });
+        return result;
       }
+    } else {
+      // Tools do aluno
+      if (alunoToolNames.includes(name)) {
+        // buscar_info, notificar_humano e enviar_midia são tratados abaixo
+        if (!['buscar_info', 'notificar_humano', 'enviar_midia'].includes(name)) {
+          result = await executeAlunoTool(name, args);
+          log.info('✔️  Tool aluno concluída', { tool: name, elapsed_ms: Date.now() - start });
+          return result;
+        }
+      }
+    }
+
+    // Tools auxiliares (aluno usa RAG, humano e mídia)
+    switch (name) {
+      case 'buscar_info':
+        log.info('🔍 BUSCAR INFO (RAG)', { query: args.query });
+        result = await executeRagTool(args);
+        break;
+
+      case 'notificar_humano':
+        log.warn('🔔 NOTIFICAR HUMANO', args);
+        result = await executeHumanTool(args, context);
+        break;
+
+      case 'enviar_midia':
+        log.info('📸 ENVIAR MÍDIA', args);
+        result = await executeMediaTool(args, context);
+        break;
+
+      default:
+        log.warn('Tool desconhecida', { tool: name, modo });
+        result = { erro: `Tool desconhecida: ${name}` };
     }
   } catch (err) {
     log.error('Erro na execução da tool', { tool: name, error: err.message });
@@ -61,14 +85,16 @@ async function executeTool(name, args, context) {
   return result;
 }
 
-// ─── Loop do agente ──────────────────────────────────────────────────────────
+// ─── Loop do agente ───────────────────────────────────────────────────────────
 
 async function runAgent(sessionId, userMessage, systemPrompt, context = {}) {
   const MAX_ITERATIONS = 8;
   const agentStart = Date.now();
+  const modo = context.modo || 'aluno';
 
   log.info('🎯 Iniciando agente', {
     sessionId,
+    modo,
     telefone: context.telefoneCliente,
     preview: userMessage?.slice(0, 80),
   });
@@ -83,16 +109,17 @@ async function runAgent(sessionId, userMessage, systemPrompt, context = {}) {
     ...history.map((h) => ({ role: h.role, content: h.content })),
   ];
 
+  // Seleciona o conjunto de tools correto para o modo
+  const tools = modo === 'professor' ? toolsProfessor : toolsAluno;
+
   let iterations = 0;
 
   while (iterations < MAX_ITERATIONS) {
     iterations++;
     const iterStart = Date.now();
 
-    log.debug(`🔄 Iteração ${iterations}/${MAX_ITERATIONS}`, { sessionId, total_messages: messages.length });
+    log.debug(`🔄 Iteração ${iterations}/${MAX_ITERATIONS}`, { sessionId, modo, total_messages: messages.length });
 
-    // Modelos legados (gpt-3.5-*, gpt-4, gpt-4-*, gpt-4o clássico) usam max_tokens.
-    // Modelos novos (gpt-4o-mini 2024+, gpt-5*, o1, o3, o4, etc.) usam max_completion_tokens.
     const isLegacyModel = /^gpt-(3\.5|4(?!o-mini|-mini|-5|-turbo-preview|-vision|-0125|-1106|-32k|-0613|-0314|-4-0314|-4-0613|-4-32k))/i.test(config.openai.model);
     const tokenParam = isLegacyModel
       ? { max_tokens: config.openai.maxTokens }
@@ -112,6 +139,7 @@ async function runAgent(sessionId, userMessage, systemPrompt, context = {}) {
 
     log.debug(`📡 OpenAI respondeu — iteração ${iterations}`, {
       sessionId,
+      modo,
       finish_reason: choice.finish_reason,
       tool_calls: toolCalls.map((t) => t.function.name),
       tokens: response.usage,
@@ -125,6 +153,7 @@ async function runAgent(sessionId, userMessage, systemPrompt, context = {}) {
       await saveMessage(sessionId, 'assistant', finalText);
       log.info('🏁 Agente concluído', {
         sessionId,
+        modo,
         iteracoes: iterations,
         elapsed_ms: Date.now() - agentStart,
         tokens_total: response.usage?.total_tokens,
@@ -133,13 +162,13 @@ async function runAgent(sessionId, userMessage, systemPrompt, context = {}) {
       return finalText;
     }
 
-    log.info('🔧 Executando tools', { sessionId, tools: toolCalls.map((t) => t.function.name) });
+    log.info('🔧 Executando tools', { sessionId, modo, tools: toolCalls.map((t) => t.function.name) });
 
     const toolResults = await Promise.all(
       toolCalls.map(async (toolCall) => {
         let args;
         try { args = JSON.parse(toolCall.function.arguments); } catch { args = {}; }
-        const result = await executeTool(toolCall.function.name, args, context);
+        const result = await executeTool(toolCall.function.name, args, context, modo);
         return { tool_call_id: toolCall.id, result };
       })
     );
@@ -149,7 +178,7 @@ async function runAgent(sessionId, userMessage, systemPrompt, context = {}) {
     }
   }
 
-  log.warn('🚨 Limite de iterações atingido', { sessionId, MAX_ITERATIONS });
+  log.warn('🚨 Limite de iterações atingido', { sessionId, modo, MAX_ITERATIONS });
   const fallback = 'Desculpe, não consegui processar sua solicitação. Por favor, tente novamente.';
   await saveMessage(sessionId, 'assistant', fallback);
   return fallback;

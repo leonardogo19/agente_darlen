@@ -4,7 +4,9 @@ const { enqueue, cancel } = require('./debouncer');
 const { getClientByPhone, createClient, updateClientSession, pauseClient, unpauseClient } = require('../shared/supabase');
 const { sendText, sendTyping } = require('./sender');
 const { runAgent } = require('../agent/agent');
-const { buildSystemPrompt } = require('../agent/prompt');
+const { buildPromptAluno } = require('../agent/promptAluno');
+const { buildPromptProfessor } = require('../agent/promptProfessor');
+const { chamarApiStudio } = require('../studio/studioApi');
 const { create } = require('../utils/logger');
 const { cleanMarkdown } = require('../shared/cleanText');
 const { v4: uuidv4 } = require('uuid');
@@ -202,9 +204,38 @@ async function processMessages(messages, telefoneCliente, sessionId, serverUrl, 
     combined_preview: combinedMessage.slice(0, 100),
   });
 
-  const systemPrompt = buildSystemPrompt(telefoneCliente);
+  // ── Identificar se é professor (PRIORIDADE) ────────────────────────────────
+  let modo = 'aluno';
+  let professor = null;
+
+  try {
+    const resultado = await chamarApiStudio({
+      acao: 'professor',
+      metodo: 'POST',
+      corpo: { acao: 'identificar', telefone: telefoneCliente },
+    });
+
+    if (resultado?.eh_professor === true && resultado?.professor) {
+      modo = 'professor';
+      professor = resultado.professor;
+      log.info('👨‍🏫 Professor identificado', { telefoneCliente, nome: professor.nome, id: professor.id });
+    } else {
+      log.debug('Não é professor — modo aluno', { telefoneCliente });
+    }
+  } catch (err) {
+    log.warn('Erro ao identificar professor — assumindo modo aluno', { telefoneCliente, error: err.message });
+  }
+
+  // ── Selecionar prompt correto ──────────────────────────────────────────────
+  const systemPrompt = modo === 'professor'
+    ? buildPromptProfessor(telefoneCliente, professor)
+    : buildPromptAluno(telefoneCliente);
+
+  // ── Chamar o agente com o modo correto ────────────────────────────────────
   const response = await runAgent(sessionId, combinedMessage, systemPrompt, {
     telefoneCliente,
+    modo,
+    professor,
     wpp: { serverUrl, nomeInstancia, apikey },
   });
 
@@ -220,6 +251,7 @@ async function processMessages(messages, telefoneCliente, sessionId, serverUrl, 
 
   log.info('Enviando resposta picotada', {
     telefoneCliente,
+    modo,
     total_partes: partes.length,
     partes: partes.map((p) => p.slice(0, 50)),
   });
@@ -239,6 +271,7 @@ async function processMessages(messages, telefoneCliente, sessionId, serverUrl, 
   log.info('Ciclo completo', {
     telefoneCliente,
     sessionId,
+    modo,
     partes: partes.length,
     elapsed_ms: Date.now() - start,
   });
