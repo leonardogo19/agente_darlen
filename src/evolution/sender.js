@@ -167,13 +167,22 @@ async function enviarMidia({ categoria, telefone }, contextoWpp) {
 // ─── Notificação humana ──────────────────────────────────────────────────────
 
 /**
+ * Normaliza telefone para link wa.me — remove @s.whatsapp.net e caracteres não numéricos
+ */
+function formatarTelefoneWaMe(telefone) {
+  if (!telefone || telefone === 'não informado') return telefone;
+  const numero = telefone.replace(/@.*$/, '').replace(/\D/g, '');
+  return `wa.me/${numero}`;
+}
+
+/**
  * Notifica o atendente humano via WhatsApp com os dados do aluno e o problema.
  */
 async function notificarHumano({ nome, telefone, problema, resumo }, contextoWpp) {
   const { serverUrl, nomeInstancia, apikey } = contextoWpp;
 
   const nomeExibido     = nome     || 'Aluno não identificado';
-  const telefoneExibido = telefone || 'não informado';
+  const telefoneExibido = formatarTelefoneWaMe(telefone || 'não informado');
   const problemaExibido = problema || 'não informado';
   const resumoExibido   = resumo   || '';
 
