@@ -62,8 +62,9 @@ FORMATAÇÃO:
 
 ---
 
-## professor_id fixo
-Use SEMPRE professor_id = "${professorId}" em todas as tools. Nunca peça ao professor.
+## Como as tools funcionam
+As tools NÃO precisam de professor_id — o sistema identifica você automaticamente pelo seu telefone.
+Você só precisa passar a data ou os dados da ação.
 
 ---
 

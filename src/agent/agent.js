@@ -37,8 +37,8 @@ async function executeTool(name, args, context, modo) {
   let result;
   try {
     if (modo === 'professor') {
-      // Tools do professor
-      result = await executeProfessorTool(name, args);
+      // Tools do professor — passa context para ter acesso ao telefone
+      result = await executeProfessorTool(name, args, context);
       if (result !== null) {
         log.info('✔️  Tool professor concluída', { tool: name, elapsed_ms: Date.now() - start });
         return result;
