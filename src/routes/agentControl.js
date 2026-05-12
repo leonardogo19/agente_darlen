@@ -9,6 +9,7 @@
 const express = require('express');
 const { getClientByPhone, pauseClient, unpauseClient } = require('../shared/supabase');
 const { cancel } = require('../evolution/debouncer');
+const { normalizarTelefone } = require('../shared/phone');
 const config = require('../config');
 const { create } = require('../utils/logger');
 
@@ -17,10 +18,11 @@ const router = express.Router();
 
 // ── POST /agent/pause ────────────────────────────────────────────────────────
 router.post('/pause', async (req, res) => {
-  const { telefone, horas = 3 } = req.body;
+  const { telefone: telefoneRaw, horas = 3 } = req.body;
+  const telefone = normalizarTelefone(telefoneRaw) ?? telefoneRaw;
 
   if (!telefone) {
-    return res.status(400).json({ erro: 'Campo "telefone" obrigatório.' });
+    return res.status(400).json({ erro: 'Campo "telefone" obrigátorio.' });
   }
 
   try {
@@ -50,10 +52,11 @@ router.post('/pause', async (req, res) => {
 
 // ── POST /agent/unpause ──────────────────────────────────────────────────────
 router.post('/unpause', async (req, res) => {
-  const { telefone } = req.body;
+  const { telefone: telefoneRaw } = req.body;
+  const telefone = normalizarTelefone(telefoneRaw) ?? telefoneRaw;
 
   if (!telefone) {
-    return res.status(400).json({ erro: 'Campo "telefone" obrigatório.' });
+    return res.status(400).json({ erro: 'Campo "telefone" obrigátorio.' });
   }
 
   try {
@@ -80,10 +83,11 @@ router.post('/unpause', async (req, res) => {
 
 // ── GET /agent/status ────────────────────────────────────────────────────────
 router.get('/status', async (req, res) => {
-  const { telefone } = req.query;
+  const { telefone: telefoneRaw } = req.query;
+  const telefone = normalizarTelefone(telefoneRaw) ?? telefoneRaw;
 
   if (!telefone) {
-    return res.status(400).json({ erro: 'Query param "telefone" obrigatório.' });
+    return res.status(400).json({ erro: 'Query param "telefone" obrigátorio.' });
   }
 
   try {

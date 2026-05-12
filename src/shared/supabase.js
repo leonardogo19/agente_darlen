@@ -2,20 +2,31 @@ const { createClient: createSupabaseClient } = require('@supabase/supabase-js');
 const { v4: uuidv4 } = require('uuid');
 const config = require('../config');
 const { create } = require('../utils/logger');
+const { normalizarTelefone, variantesTelefone } = require('./phone');
 
 const log = create('Supabase');
 const supabase = createSupabaseClient(config.supabase.url, config.supabase.key);
 
 /**
- * Busca aluno pelo telefone e empresa
+ * Busca aluno pelo telefone e empresa.
+ * Tenta as duas variantes (com e sem o 9) para não quebrar com números antigos.
  */
 async function getClientByPhone(telefone, empresaId) {
-  log.debug('Buscando cliente', { telefone, empresaId });
+  // Normaliza o número antes de qualquer coisa
+  const canonico = normalizarTelefone(telefone);
+  const variantes = variantesTelefone(telefone);
+
+  log.debug('Buscando cliente', { telefone, canonico, variantes, empresaId });
+
+  if (variantes.length === 0) {
+    log.warn('Telefone inválido, não é possível buscar', { telefone });
+    return [];
+  }
 
   const { data, error } = await supabase
     .from('alunos')
     .select('*')
-    .eq('telefone', telefone)
+    .in('telefone', variantes)
     .eq('estudio_id', empresaId);
 
   if (error) {

@@ -9,6 +9,7 @@ const { buildPromptProfessor } = require('../agent/promptProfessor');
 const { chamarApiStudio } = require('../studio/studioApi');
 const { create } = require('../utils/logger');
 const { cleanMarkdown } = require('../shared/cleanText');
+const { normalizarTelefone } = require('../shared/phone');
 const { v4: uuidv4 } = require('uuid');
 
 const log = create('Webhook');
@@ -281,15 +282,18 @@ async function processMessages(messages, telefoneCliente, sessionId, serverUrl, 
 
 function extractCampos(body) {
   try {
-    const telefoneCliente =
+    const rawTelefone =
       body?.conversation?.contact_inbox?.contact_id ||
       body?.data?.key?.remoteJid ||
       null;
 
-    if (!telefoneCliente) return null;
+    if (!rawTelefone) return null;
+
+    // Normaliza para o padrão canônico — cobre 8 e 9 dígitos
+    const telefoneCliente = normalizarTelefone(rawTelefone.toString()) ?? rawTelefone.toString();
 
     return {
-      telefoneCliente: telefoneCliente.toString(),
+      telefoneCliente,
       telefoneEmpresa: body?.sender || null,
       nomeCliente:     body?.data?.pushName || null,
       nomeInstancia:   body?.instance || null,
