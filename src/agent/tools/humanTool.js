@@ -13,7 +13,6 @@ const humanToolDefinition = {
       properties: {
         aluno_id: { type: 'string' },
         nome:     { type: 'string' },
-        telefone: { type: 'string', description: 'Opcional, o sistema pegará automaticamente' },
         problema: { type: 'string', description: 'pedido de atendimento humano | erro de agendamento | renovação de plano | dúvida de cobrança' },
         resumo:   { type: 'string', description: 'Contexto breve para o atendente' },
       },
@@ -24,10 +23,11 @@ const humanToolDefinition = {
 // ─── Execução da tool de notificação humana ──────────────────────────────────
 
 async function executeHumanTool(args, context) {
-  // Garantir que o telefone venha do contexto se não for informado pela tool
+  // O telefone NUNCA deve ser escolhido pelo agente. 
+  // Usamos sempre o telefone de quem está enviando a mensagem no WhatsApp.
   const payload = {
     ...args,
-    telefone: args.telefone || context.telefoneCliente,
+    telefone: context.telefoneCliente, 
   };
   return notificarHumano(payload, context.wpp || {});
 }
