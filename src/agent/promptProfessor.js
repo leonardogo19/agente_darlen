@@ -14,10 +14,11 @@ function buildPromptProfessor(telefoneCliente, professor) {
     const isoAgora   = `${ano}-${mes}-${dia}T${hora}:${minuto}:00-03:00`;
 
     // Tabela de 60 dias para cobrir qualquer data que o professor pedir
+    const diaBase = agora.getDate(); // guarda o dia original antes do loop
     const proximosDias = [];
     for (let i = 0; i <= 60; i++) {
         const d = new Date(agora);
-        d.setDate(agora.getDate() + i);
+        d.setDate(diaBase + i);
         const dd   = String(d.getDate()).padStart(2, '0');
         const mm   = String(d.getMonth() + 1).padStart(2, '0');
         const aaaa = d.getFullYear();
