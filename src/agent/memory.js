@@ -24,14 +24,16 @@ async function saveMessage(sessionId, role, content) {
 }
 
 /**
- * Recupera as últimas N mensagens da sessão em ordem cronológica
+ * Recupera as últimas N mensagens da sessão em ordem cronológica,
+ * com marcadores de data/hora injetados entre mensagens de dias diferentes.
+ * Isso evita que o modelo trate conversas de dias distintos como continuação.
  */
 async function getHistory(sessionId) {
   log.debug('Buscando histórico', { sessionId, limit: CONTEXT_WINDOW });
 
   const { data, error } = await supabase
     .from('chat_memory')
-    .select('role, content')
+    .select('role, content, created_at')
     .eq('session_id', sessionId)
     .order('created_at', { ascending: false })
     .limit(CONTEXT_WINDOW);
@@ -41,9 +43,54 @@ async function getHistory(sessionId) {
     throw new Error(`[Memory] getHistory: ${error.message}`);
   }
 
-  const history = (data || []).reverse();
-  log.debug('Histórico carregado', { sessionId, mensagens: history.length });
+  const rows = (data || []).reverse();
+
+  // Injeta marcadores de quebra entre mensagens de dias diferentes
+  const history = [];
+  let lastDateStr = null;
+
+  for (const row of rows) {
+    const ts = row.created_at ? new Date(row.created_at) : null;
+
+    if (ts) {
+      // Formata a data no fuso de São Paulo
+      const dateStr = ts.toLocaleDateString('pt-BR', {
+        timeZone: 'America/Sao_Paulo',
+        weekday: 'long',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      });
+      const timeStr = ts.toLocaleTimeString('pt-BR', {
+        timeZone: 'America/Sao_Paulo',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+
+      if (lastDateStr !== null && dateStr !== lastDateStr) {
+        // Dia diferente — injeta marcador de quebra de contexto
+        history.push({
+          role: 'system',
+          content: `[Nova conversa — ${dateStr} às ${timeStr}. Trate como início de uma nova interação, não como continuação da anterior.]`,
+        });
+      } else if (lastDateStr === null) {
+        // Primeira mensagem do histórico — registra o dia sem marcador de quebra
+        history.push({
+          role: 'system',
+          content: `[Conversa iniciada em ${dateStr}]`,
+        });
+      }
+
+      lastDateStr = dateStr;
+    }
+
+    history.push({ role: row.role, content: row.content });
+  }
+
+  log.debug('Histórico carregado', { sessionId, mensagens: rows.length, comMarcadores: history.length });
   return history;
 }
+
+module.exports = { saveMessage, getHistory };
 
 module.exports = { saveMessage, getHistory };
