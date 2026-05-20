@@ -166,7 +166,9 @@ const alunoToolDefinitions = [
                 type: 'object',
                 required: ['agendamento_id'],
                 properties: {
-                    agendamento_id: { type: 'string' },
+                    agendamento_id: { type: 'string', description: 'ID do agendamento (campo `id` de proximas_aulas). Se não souber o ID ou for incerto, passe qualquer string/nulo, mas forneça data_aula e aluno_id como fallbacks.' },
+                    data_aula:      { type: 'string', description: 'Opcional. Data e hora da aula em ISO 8601 (offset -03:00) a ser cancelada (campo `data` de proximas_aulas). Altamente recomendado fornecer.' },
+                    aluno_id:       { type: 'string', description: 'Opcional. UUID do aluno.' },
                     motivo:         { type: 'string', description: 'Motivo do cancelamento' },
                 },
             },
@@ -265,7 +267,12 @@ async function executeAlunoTool(name, args, context = {}) {
         case 'cancelar_aula':
             return chamarApiStudio({
                 acao: 'cancelar',
-                corpo: comTelefone({ agendamento_id: args.agendamento_id, motivo: args.motivo || 'Cancelamento solicitado pelo aluno' }),
+                corpo: comTelefone({
+                    agendamento_id: args.agendamento_id,
+                    data_aula: args.data_aula,
+                    aluno_id: args.aluno_id,
+                    motivo: args.motivo || 'Cancelamento solicitado pelo aluno'
+                }),
             });
         case 'listar_professores':
             return chamarApiStudio({ acao: 'professores', metodo: 'GET' });
