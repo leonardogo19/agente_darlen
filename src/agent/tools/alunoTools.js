@@ -108,15 +108,15 @@ const alunoToolDefinitions = [
         type: 'function',
         function: {
             name: 'verificar_disponibilidade',
-            description: 'Verifica horários disponíveis para agendamento. Sempre chame antes de confirmar qualquer aula.',
+            description: 'Verifica horários disponíveis para agendamento. Sempre chame antes de oferecer opções ou confirmar.',
             parameters: {
                 type: 'object',
-                required: ['inicio', 'fim', 'aluno_id'],
+                required: ['inicio', 'aluno_id'],
                 properties: {
-                    inicio:       { type: 'string', description: 'Início da janela em ISO 8601 com -03:00. Ex: 2026-04-28T10:00:00-03:00' },
-                    fim:          { type: 'string', description: 'Fim da janela em ISO 8601 com -03:00. Ex: 2026-04-28T11:00:00-03:00' },
-                    aluno_id:     { type: 'string', description: 'UUID do aluno' },
-                    professor_id: { type: 'string', description: 'UUID do professor (opcional — filtra por professor específico)' },
+                    inicio:       { type: 'string', description: 'Data/Hora de início para a busca em ISO 8601 (offset -03:00). Ex: 2026-04-28T07:00:00-03:00' },
+                    fim:          { type: 'string', description: 'Opcional. Data/Hora final da busca em ISO 8601 (offset -03:00). Se omitido, busca por 24 horas a partir do início.' },
+                    aluno_id:     { type: 'string', description: 'UUID do aluno (de buscar_aluno)' },
+                    professor_id: { type: 'string', description: 'Opcional. UUID do professor para filtrar apenas horários deste professor.' },
                 },
             },
         },
