@@ -5,7 +5,7 @@ const { create } = require('../utils/logger');
 const log = create('Memory');
 const supabase = createClient(config.supabase.url, config.supabase.key);
 
-const CONTEXT_WINDOW = 25;
+const CONTEXT_WINDOW = 15;
 
 /**
  * Salva uma mensagem na memória do chat
@@ -91,6 +91,20 @@ async function getHistory(sessionId) {
   return history;
 }
 
-module.exports = { saveMessage, getHistory };
+/**
+ * Limpa o histórico de uma sessão (usado quando o aluno inicia uma nova intenção)
+ */
+async function clearHistory(sessionId) {
+  log.debug('Limpando histórico', { sessionId });
 
-module.exports = { saveMessage, getHistory };
+  const { error } = await supabase
+    .from('chat_memory')
+    .delete()
+    .eq('session_id', sessionId);
+
+  if (error) {
+    log.error('Erro ao limpar histórico', { sessionId, error: error.message });
+  }
+}
+
+module.exports = { saveMessage, getHistory, clearHistory };
