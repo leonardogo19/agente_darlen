@@ -14,9 +14,11 @@ const ESTUDIO_ID = process.env.EMPRESA_ID || 'bda37657-6290-439e-8a92-856d0983e2
 
 /**
  * Envia mensagem de texto via Evolution API
+ * Tenta até 3 vezes com backoff exponencial em caso de falha transitória.
  */
 async function sendText(serverUrl, instance, apikey, telefone, text) {
   const url = `${serverUrl}/message/sendText/${instance}`;
+  const MAX_TENTATIVAS = 3;
 
   log.info('📤 Enviando mensagem', {
     telefone,
@@ -25,29 +27,50 @@ async function sendText(serverUrl, instance, apikey, telefone, text) {
     chars: text?.length,
   });
 
-  try {
-    const response = await axios.post(
-      url,
-      { number: telefone, text },
-      { headers: { apikey } }
-    );
+  for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
+    try {
+      const response = await axios.post(
+        url,
+        { number: telefone, text },
+        { headers: { apikey } }
+      );
 
-    log.info('✅ Mensagem enviada com sucesso', {
-      telefone,
-      status: response.status,
-      message_id: response.data?.key?.id,
-    });
+      log.info('✅ Mensagem enviada com sucesso', {
+        telefone,
+        status: response.status,
+        message_id: response.data?.key?.id,
+        tentativa,
+      });
 
-    return response.data;
-  } catch (err) {
-    log.error('❌ Falha ao enviar mensagem', {
-      telefone,
-      url,
-      status: err.response?.status,
-      response: err.response?.data,
-      error: err.message,
-    });
-    throw err;
+      return response.data;
+    } catch (err) {
+      const status = err.response?.status;
+      const isUltimaT = tentativa === MAX_TENTATIVAS;
+
+      // Erro 400 (número inválido/não existe) — não adianta tentar de novo
+      if (status === 400) {
+        log.error('❌ Falha ao enviar mensagem (número inválido — sem retry)', {
+          telefone, url, status, response: err.response?.data, error: err.message,
+        });
+        throw err;
+      }
+
+      log.warn(`⚠️  Falha ao enviar mensagem — tentativa ${tentativa}/${MAX_TENTATIVAS}`, {
+        telefone, status, error: err.message,
+      });
+
+      if (isUltimaT) {
+        log.error('❌ Falha ao enviar mensagem após todas as tentativas', {
+          telefone, url, status, response: err.response?.data, error: err.message,
+        });
+        throw err;
+      }
+
+      // Backoff: 1s, 3s, 9s...
+      const espera = Math.pow(3, tentativa) * 1000;
+      log.debug(`⏳ Aguardando ${espera}ms antes de tentar novamente`, { telefone, tentativa });
+      await new Promise((resolve) => setTimeout(resolve, espera));
+    }
   }
 }
 

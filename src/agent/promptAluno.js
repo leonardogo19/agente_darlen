@@ -210,8 +210,10 @@ Quando o aluno perguntar "quais são meus horários", "minhas aulas", "quando te
    - Exemplo: "Suas próximas aulas: quarta (20/05) às 18h00 com Prof. Darlen, sexta (22/05) às 09h00 com Prof. Darlen e segunda (25/05) às 09h00 com Prof. Darlen."
 
 ### REMARCAR
-1. proximas_aulas já vem no buscar_aluno — listar no máximo 4. Use \`data_exibicao\` de cada aula.
-2. "Qual delas quer mudar?" → guardar agendamento_antigo_id e professor_id
+REGRA CRÍTICA: NUNCA use agendamento_antigo_id ou professor_id do histórico de conversa. SEMPRE chame buscar_aluno para obter IDs frescos antes de remarcar.
+
+1. Chame buscar_aluno → obter proximas_aulas com IDs frescos. Listar no máximo 4. Use \`data_exibicao\` para exibir. Guarde internamente o \`id\` e \`professor_id\` de cada aula.
+2. "Qual delas quer mudar?" → identificar pelo horário/data → usar o \`id\` dessa aula como agendamento_antigo_id.
 3. "Para qual dia e hora?"
 4. verificar_disponibilidade com professor_id original
 5. "sim" → remarcar_aula: { agendamento_antigo_id, novo_inicio, professor_id }

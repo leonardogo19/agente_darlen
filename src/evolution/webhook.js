@@ -59,8 +59,13 @@ async function processWebhook(body, requestId) {
   // ── 2. Reação → pausa o atendimento por 3 horas (antes de qualquer filtro) ─
   // Deve vir antes do fromMe pois a reação do responsável chega com fromMe=true
   if (tipoMensagem === 'reactionMessage') {
-    // Só pausa se a reação veio do responsável (fromMe=true) ou do próprio cliente
-    log.warn('Reação recebida — pausando atendimento por 3h', { requestId, telefoneCliente, fromMe: body?.data?.key?.fromMe });
+    log.warn('Reação recebida — pausando atendimento por 3h', {
+      requestId,
+      telefoneCliente,
+      fromMe: body?.data?.key?.fromMe,
+      reaction: body?.data?.message?.reactionMessage?.text,
+      reactionKey: body?.data?.message?.reactionMessage?.key,
+    });
     cancel(telefoneCliente);
     const clients = await getClientByPhone(telefoneCliente, config.empresaId);
     if (clients.length > 0) {
@@ -70,6 +75,17 @@ async function processWebhook(body, requestId) {
       log.warn('Reação de cliente não encontrado — ignorando', { requestId, telefoneCliente });
     }
     return;
+  }
+
+  // ── Log detalhado para diagnóstico de tipos de mensagem desconhecidos ──────
+  if (tipoMensagem && !['conversation', 'extendedTextMessage', 'imageMessage', 'audioMessage'].includes(tipoMensagem)) {
+    log.info('Tipo de mensagem incomum recebido', {
+      requestId,
+      tipoMensagem,
+      fromMe: body?.data?.key?.fromMe,
+      telefoneCliente,
+      messageKeys: body?.data?.message ? Object.keys(body.data.message) : [],
+    });
   }
 
   // ── 3. Ignora mensagens enviadas pelo próprio bot ──────────────────────────

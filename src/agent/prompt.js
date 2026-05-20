@@ -423,9 +423,11 @@ Erros possíveis:
 ### REMARCAR
 SALDO IRRELEVANTE. Sempre remarcar_aula. Nunca cancelar_aula + agendar_aula.
 
-1. proximas_aulas já vem na resposta de buscar_aluno — não chame endpoint separado. Listar no máximo 4, sem IDs, sem offsets, sem horário de fim.
-   - Use o campo \`data_exibicao\` de cada aula para exibir ao aluno (já está em BRT). Use \`data\` (ISO -03:00) para passar às tools.
-2. "Qual delas quer mudar?" → guardar id (agendamento_antigo_id) e professor_id original.
+REGRA CRÍTICA: NUNCA use agendamento_antigo_id ou professor_id do histórico de conversa. IDs mudam e o histórico pode estar desatualizado. SEMPRE chame buscar_aluno antes de remarcar para obter os IDs frescos da API.
+
+1. Chame buscar_aluno → obter proximas_aulas com IDs frescos. Listar no máximo 4, sem exibir IDs ao aluno.
+   - Use \`data_exibicao\` de cada aula para exibir. Guarde internamente o \`id\` e \`professor_id\` de cada aula.
+2. "Qual delas quer mudar?" → identificar a aula pelo horário/data que o aluno mencionar → usar o \`id\` dessa aula como agendamento_antigo_id.
 3. "Para qual dia e hora?"
 4. Assim que o aluno informar → chame verificar_disponibilidade com professor_id original e janela de 1h.
 
