@@ -48,7 +48,7 @@ async function executeTool(name, args, context, modo) {
       if (alunoToolNames.includes(name)) {
         // buscar_info, notificar_humano e enviar_midia são tratados abaixo
         if (!['buscar_info', 'notificar_humano', 'enviar_midia'].includes(name)) {
-          result = await executeAlunoTool(name, args);
+          result = await executeAlunoTool(name, args, context);
           log.info('✔️  Tool aluno concluída', { tool: name, elapsed_ms: Date.now() - start });
           return result;
         }

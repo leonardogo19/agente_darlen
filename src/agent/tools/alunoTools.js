@@ -241,7 +241,14 @@ const alunoToolDefinitions = [
     },
 ];
 
-async function executeAlunoTool(name, args, context) {
+async function executeAlunoTool(name, args, context = {}) {
+    // Injeta o telefone do cliente nas operações que precisam de aluno_id
+    // Isso permite à API encontrar o aluno pelo telefone caso o UUID seja inválido
+    const comTelefone = (corpo) => ({
+        ...corpo,
+        _telefone_cliente: context.telefoneCliente || null,
+    });
+
     switch (name) {
         case 'buscar_aluno': {
             const resultado = await chamarApiStudio({ acao: 'alunos', metodo: 'GET', params: { q: args.q } });
@@ -250,15 +257,15 @@ async function executeAlunoTool(name, args, context) {
         case 'cadastrar_aluno':
             return chamarApiStudio({ acao: 'alunos', metodo: 'POST', corpo: args });
         case 'verificar_disponibilidade':
-            return chamarApiStudio({ acao: 'verificar-disponibilidade', corpo: args });
+            return chamarApiStudio({ acao: 'verificar-disponibilidade', corpo: comTelefone(args) });
         case 'agendar_aula':
-            return chamarApiStudio({ acao: 'agendar', corpo: args });
+            return chamarApiStudio({ acao: 'agendar', corpo: comTelefone(args) });
         case 'remarcar_aula':
-            return chamarApiStudio({ acao: 'remarcar', corpo: args });
+            return chamarApiStudio({ acao: 'remarcar', corpo: comTelefone(args) });
         case 'cancelar_aula':
             return chamarApiStudio({
                 acao: 'cancelar',
-                corpo: { agendamento_id: args.agendamento_id, motivo: args.motivo || 'Cancelamento solicitado pelo aluno' },
+                corpo: comTelefone({ agendamento_id: args.agendamento_id, motivo: args.motivo || 'Cancelamento solicitado pelo aluno' }),
             });
         case 'listar_professores':
             return chamarApiStudio({ acao: 'professores', metodo: 'GET' });
