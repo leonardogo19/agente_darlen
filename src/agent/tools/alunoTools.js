@@ -31,6 +31,20 @@ function utcParaBrt(isoString) {
 }
 
 /**
+ * Normaliza o nome do professor removendo espaços extras e sufixos como "portal".
+ * Ex: "Darlen  portal" → "Darlen"
+ */
+function normalizarNomeProfessor(nome) {
+    if (!nome) return nome;
+    // Remove espaços duplos, trim, e descarta palavras em minúsculo no final (ex: "portal", "fitness")
+    return nome
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/(\s+[a-z][a-zà-ú]*)+$/, '')
+        .trim();
+}
+
+/**
  * Recebe a resposta bruta de buscar_aluno e converte todas as datas
  * de proximas_aulas e historico_aulas para BRT antes de entregar ao modelo.
  */
@@ -41,13 +55,13 @@ function converterDatasAluno(data) {
         if (Array.isArray(aluno.proximas_aulas)) {
             aluno.proximas_aulas = aluno.proximas_aulas.map((aula) => {
                 const brt = utcParaBrt(aula.data);
-                return { ...aula, data: brt.iso, data_exibicao: brt.exibicao };
+                return { ...aula, data: brt.iso, data_exibicao: brt.exibicao, professor: normalizarNomeProfessor(aula.professor) };
             });
         }
         if (Array.isArray(aluno.historico_aulas)) {
             aluno.historico_aulas = aluno.historico_aulas.map((aula) => {
                 const brt = utcParaBrt(aula.data);
-                return { ...aula, data: brt.iso, data_exibicao: brt.exibicao };
+                return { ...aula, data: brt.iso, data_exibicao: brt.exibicao, professor: normalizarNomeProfessor(aula.professor) };
             });
         }
         return aluno;
