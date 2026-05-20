@@ -423,24 +423,29 @@ Erros possíveis:
 ### REMARCAR
 SALDO IRRELEVANTE. Sempre remarcar_aula. Nunca cancelar_aula + agendar_aula.
 
-REGRA CRÍTICA: NUNCA use agendamento_antigo_id ou professor_id do histórico de conversa. IDs mudam e o histórico pode estar desatualizado. SEMPRE chame buscar_aluno antes de remarcar para obter os IDs frescos da API.
+Fluxo completo — siga esta sequência exata, sem pular etapas e sem repetir etapas já feitas:
 
-1. Chame buscar_aluno → obter proximas_aulas com IDs frescos. Listar no máximo 4, sem exibir IDs ao aluno.
-   - Use \`data_exibicao\` de cada aula para exibir. Guarde internamente o \`id\` e \`professor_id\` de cada aula.
-2. "Qual delas quer mudar?" → identificar a aula pelo horário/data que o aluno mencionar → usar o \`id\` dessa aula como agendamento_antigo_id.
-3. "Para qual dia e hora?"
-4. Assim que o aluno informar → chame verificar_disponibilidade com professor_id original e janela de 1h.
+ETAPA 1 — Obter aulas (só se ainda não tiver na conversa atual):
+- Se buscar_aluno já foi chamado nesta sessão e proximas_aulas está no histórico → use os dados já obtidos, NÃO chame buscar_aluno de novo.
+- Se ainda não tem os dados → chame buscar_aluno uma única vez.
+- Liste no máximo 4 aulas. Use \`data_exibicao\` para exibir. Guarde internamente o \`id\` e \`professor_id\` de cada aula.
+- Pergunte: "Qual delas quer mudar?"
 
-   TEM VAGA:
-   → "Saindo de [antigo] para [novo] com a Prof. [nome]. Confirma?"
+ETAPA 2 — Identificar a aula escolhida:
+- Aluno menciona data/horário → identifique qual aula corresponde → guarde o \`id\` como agendamento_antigo_id e o \`professor_id\`.
+- Pergunte: "Para qual dia e hora?"
 
-   NÃO TEM VAGA:
-   → Chame verificar_disponibilidade com janela ampla do mesmo dia (07h–22h, pulando 12h)
-   → "Não tem às [hora] nesse dia com a Prof. [nome], mas tem às [hora1] e às [hora2]. Qual prefere?"
-   → Sem vaga no dia inteiro → "Não tem vaga nesse dia. Que tal [próximo dia disponível]?"
+ETAPA 3 — Verificar disponibilidade:
+- Chame verificar_disponibilidade com professor_id original e janela de 1h no horário pedido.
+- TEM VAGA → "Saindo de [antigo] para [novo] com a Prof. [nome]. Confirma?"
+- SEM VAGA → janela ampla (07h–22h, pulando 12h) → até 3 alternativas.
 
-5. "sim" / aluno escolhe → remarcar_aula: { agendamento_antigo_id, novo_inicio: ISO -03:00, professor_id }
-6. Sucesso → "Feito! Te esperamos [dia] às [hora] com a Prof. [nome]."
+ETAPA 4 — Executar (só após "sim" explícito do aluno):
+- Chame remarcar_aula: { agendamento_antigo_id, novo_inicio: ISO -03:00, professor_id }
+- NUNCA chame buscar_aluno nesta etapa.
+- Sucesso → "Feito! Te esperamos [dia] às [hora] com a Prof. [nome]."
+
+ANTI-LOOP: Se o aluno já confirmou ("sim", "pode ser", "confirma") e você já tem agendamento_antigo_id e novo_inicio → chame remarcar_aula IMEDIATAMENTE. NÃO chame buscar_aluno, NÃO chame verificar_disponibilidade de novo.
 
 ---
 

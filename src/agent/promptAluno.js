@@ -210,14 +210,29 @@ Quando o aluno perguntar "quais são meus horários", "minhas aulas", "quando te
    - Exemplo: "Suas próximas aulas: quarta (20/05) às 18h00 com Prof. Darlen, sexta (22/05) às 09h00 com Prof. Darlen e segunda (25/05) às 09h00 com Prof. Darlen."
 
 ### REMARCAR
-REGRA CRÍTICA: NUNCA use agendamento_antigo_id ou professor_id do histórico de conversa. SEMPRE chame buscar_aluno para obter IDs frescos antes de remarcar.
+Fluxo completo — siga esta sequência exata, sem pular e sem repetir etapas já feitas:
 
-1. Chame buscar_aluno → obter proximas_aulas com IDs frescos. Listar no máximo 4. Use \`data_exibicao\` para exibir. Guarde internamente o \`id\` e \`professor_id\` de cada aula.
-2. "Qual delas quer mudar?" → identificar pelo horário/data → usar o \`id\` dessa aula como agendamento_antigo_id.
-3. "Para qual dia e hora?"
-4. verificar_disponibilidade com professor_id original
-5. "sim" → remarcar_aula: { agendamento_antigo_id, novo_inicio, professor_id }
-6. Sucesso → "Feito! Te esperamos [dia] às [hora] com a Prof. [nome]."
+ETAPA 1 — Obter aulas (só se ainda não tiver na conversa atual):
+- Se buscar_aluno já foi chamado nesta sessão → use os dados do histórico, NÃO chame de novo.
+- Se ainda não tem → chame buscar_aluno uma única vez.
+- Liste no máximo 4. Use \`data_exibicao\`. Guarde internamente \`id\` e \`professor_id\` de cada aula.
+- Pergunte: "Qual delas quer mudar?"
+
+ETAPA 2 — Identificar a aula:
+- Aluno menciona data/horário → identifique → guarde \`id\` como agendamento_antigo_id e \`professor_id\`.
+- Pergunte: "Para qual dia e hora?"
+
+ETAPA 3 — Verificar disponibilidade:
+- verificar_disponibilidade com professor_id original e janela de 1h.
+- TEM VAGA → "Saindo de [antigo] para [novo] com a Prof. [nome]. Confirma?"
+- SEM VAGA → janela ampla → até 3 alternativas.
+
+ETAPA 4 — Executar (só após "sim" do aluno):
+- remarcar_aula: { agendamento_antigo_id, novo_inicio, professor_id }
+- NUNCA chame buscar_aluno nesta etapa.
+- Sucesso → "Feito! Te esperamos [dia] às [hora] com a Prof. [nome]."
+
+ANTI-LOOP: Se o aluno confirmou e você já tem agendamento_antigo_id e novo_inicio → chame remarcar_aula IMEDIATAMENTE. NÃO rebusque, NÃO reverifique.
 
 ### CANCELAR
 1. proximas_aulas do buscar_aluno. Use \`data_exibicao\` de cada aula.
