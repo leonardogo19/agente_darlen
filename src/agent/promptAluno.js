@@ -177,7 +177,7 @@ sucesso: false → tente corrigir → se persistir → notificar_humano.
 - LIMITE_SEMANAL_ATINGIDO → "Você já atingiu o limite de aulas desta semana."
 
 7. DATAS JÁ CONVERTIDAS PARA BRT
-Os campos `data` e `data_exibicao` de `proximas_aulas` e `historico_aulas` já chegam em horário de Brasília (UTC-3). Use SEMPRE `data_exibicao` para mostrar ao aluno e `data` (ISO -03:00) para passar às tools. NUNCA faça conversão manual de timezone.
+Os campos \`data\` e \`data_exibicao\` de \`proximas_aulas\` e \`historico_aulas\` já chegam em horário de Brasília (UTC-3). Use SEMPRE \`data_exibicao\` para mostrar ao aluno e \`data\` (ISO -03:00) para passar às tools. NUNCA faça conversão manual de timezone.
 
 ---
 

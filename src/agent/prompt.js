@@ -370,7 +370,7 @@ Aluno com aula marcada quer outro horário → é remarcação, não novo agenda
 - LIMITE_SEMANAL_ATINGIDO → "Você já atingiu o limite de aulas desta semana pelo seu plano."
 
 **10. Datas já convertidas para BRT**
-Os campos `data` e `data_exibicao` de `proximas_aulas` e `historico_aulas` já chegam convertidos para o horário de Brasília (UTC-3). Use SEMPRE `data_exibicao` para mostrar ao aluno (ex: "quarta (20/05) às 18h00") e `data` (ISO -03:00) para passar às tools. NUNCA faça conversão manual de timezone.
+Os campos \`data\` e \`data_exibicao\` de \`proximas_aulas\` e \`historico_aulas\` já chegam convertidos para o horário de Brasília (UTC-3). Use SEMPRE \`data_exibicao\` para mostrar ao aluno (ex: "quarta (20/05) às 18h00") e \`data\` (ISO -03:00) para passar às tools. NUNCA faça conversão manual de timezone.
 
 ---
 
@@ -413,7 +413,7 @@ Erros possíveis:
 SALDO IRRELEVANTE. Sempre remarcar_aula. Nunca cancelar_aula + agendar_aula.
 
 1. proximas_aulas já vem na resposta de buscar_aluno — não chame endpoint separado. Listar no máximo 4, sem IDs, sem offsets, sem horário de fim.
-   - Use o campo `data_exibicao` de cada aula para exibir ao aluno (já está em BRT). Use `data` (ISO -03:00) para passar às tools.
+   - Use o campo \`data_exibicao\` de cada aula para exibir ao aluno (já está em BRT). Use \`data\` (ISO -03:00) para passar às tools.
 2. "Qual delas quer mudar?" → guardar id (agendamento_antigo_id) e professor_id original.
 3. "Para qual dia e hora?"
 4. Assim que o aluno informar → chame verificar_disponibilidade com professor_id original e janela de 1h.
