@@ -1,5 +1,61 @@
 const { chamarApiStudio } = require('../../studio/studioApi');
 
+// ─── Conversão de datas UTC → BRT (UTC-3) ────────────────────────────────────
+
+const DIAS_SEMANA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+
+/**
+ * Converte uma string ISO UTC para BRT (UTC-3) e retorna um objeto com:
+ * - iso: string ISO com offset -03:00  (para o modelo usar em tool calls)
+ * - exibicao: string legível "quarta (20/05) às 18h00"  (para o modelo exibir ao aluno)
+ */
+function utcParaBrt(isoString) {
+    if (!isoString) return isoString;
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return isoString;
+
+    // Subtrai 3 horas em milissegundos
+    const brt = new Date(d.getTime() - 3 * 60 * 60 * 1000);
+
+    const dia     = String(brt.getUTCDate()).padStart(2, '0');
+    const mes     = String(brt.getUTCMonth() + 1).padStart(2, '0');
+    const ano     = brt.getUTCFullYear();
+    const hora    = String(brt.getUTCHours()).padStart(2, '0');
+    const minuto  = String(brt.getUTCMinutes()).padStart(2, '0');
+    const diaSem  = DIAS_SEMANA[brt.getUTCDay()];
+
+    return {
+        iso:      `${ano}-${mes}-${dia}T${hora}:${minuto}:00-03:00`,
+        exibicao: `${diaSem} (${dia}/${mes}) às ${hora}h${minuto}`,
+    };
+}
+
+/**
+ * Recebe a resposta bruta de buscar_aluno e converte todas as datas
+ * de proximas_aulas e historico_aulas para BRT antes de entregar ao modelo.
+ */
+function converterDatasAluno(data) {
+    if (!data?.sucesso || !Array.isArray(data.alunos)) return data;
+
+    data.alunos = data.alunos.map((aluno) => {
+        if (Array.isArray(aluno.proximas_aulas)) {
+            aluno.proximas_aulas = aluno.proximas_aulas.map((aula) => {
+                const brt = utcParaBrt(aula.data);
+                return { ...aula, data: brt.iso, data_exibicao: brt.exibicao };
+            });
+        }
+        if (Array.isArray(aluno.historico_aulas)) {
+            aluno.historico_aulas = aluno.historico_aulas.map((aula) => {
+                const brt = utcParaBrt(aula.data);
+                return { ...aula, data: brt.iso, data_exibicao: brt.exibicao };
+            });
+        }
+        return aluno;
+    });
+
+    return data;
+}
+
 // ─── Tools exclusivas para ALUNOS ────────────────────────────────────────────
 
 const alunoToolDefinitions = [
@@ -171,8 +227,10 @@ const alunoToolDefinitions = [
 
 async function executeAlunoTool(name, args, context) {
     switch (name) {
-        case 'buscar_aluno':
-            return chamarApiStudio({ acao: 'alunos', metodo: 'GET', params: { q: args.q } });
+        case 'buscar_aluno': {
+            const resultado = await chamarApiStudio({ acao: 'alunos', metodo: 'GET', params: { q: args.q } });
+            return converterDatasAluno(resultado);
+        }
         case 'cadastrar_aluno':
             return chamarApiStudio({ acao: 'alunos', metodo: 'POST', corpo: args });
         case 'verificar_disponibilidade':

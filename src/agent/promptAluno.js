@@ -176,8 +176,8 @@ sucesso: false → tente corrigir → se persistir → notificar_humano.
 - HORARIO_BLOQUEADO → "Esse horário está bloqueado. Prefere outro?"
 - LIMITE_SEMANAL_ATINGIDO → "Você já atingiu o limite de aulas desta semana."
 
-7. CONVERSÃO DE TIMEZONE (IMPORTANTE)
-Sempre subtraia 3 horas de datas ISO da API (ex: 12:00Z → 09h00).
+7. DATAS JÁ CONVERTIDAS PARA BRT
+Os campos `data` e `data_exibicao` de `proximas_aulas` e `historico_aulas` já chegam em horário de Brasília (UTC-3). Use SEMPRE `data_exibicao` para mostrar ao aluno e `data` (ISO -03:00) para passar às tools. NUNCA faça conversão manual de timezone.
 
 ---
 
