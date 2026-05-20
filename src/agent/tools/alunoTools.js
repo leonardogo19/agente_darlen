@@ -146,11 +146,13 @@ const alunoToolDefinitions = [
             description: 'Remarca uma aula existente sem debitar saldo. Use SEMPRE para trocar horário — nunca cancelar + agendar.',
             parameters: {
                 type: 'object',
-                required: ['agendamento_antigo_id', 'novo_inicio', 'professor_id'],
+                required: ['aluno_id', 'data_antiga', 'novo_inicio'],
                 properties: {
-                    agendamento_antigo_id: { type: 'string', description: 'ID do agendamento a ser remarcado' },
-                    novo_inicio:           { type: 'string', description: 'Novo horário em ISO 8601 com -03:00' },
-                    professor_id:          { type: 'string', description: 'UUID do professor (mesmo professor original)' },
+                    aluno_id:              { type: 'string', description: 'UUID do aluno (de buscar_aluno)' },
+                    data_antiga:           { type: 'string', description: 'Data/hora da aula a remarcar em ISO 8601 com -03:00. Use o campo `data` de proximas_aulas. Ex: 2026-05-22T10:00:00-03:00' },
+                    novo_inicio:           { type: 'string', description: 'Novo horário em ISO 8601 com -03:00. Ex: 2026-05-26T10:00:00-03:00' },
+                    agendamento_antigo_id: { type: 'string', description: 'ID do agendamento (opcional — use o campo `id` de proximas_aulas se disponível)' },
+                    professor_id:          { type: 'string', description: 'UUID do professor (opcional — será o mesmo da aula original se omitido)' },
                 },
             },
         },
