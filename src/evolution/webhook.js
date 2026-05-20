@@ -56,7 +56,23 @@ async function processWebhook(body, requestId) {
     temMensagem: !!mensagem,
   });
 
-  // ── 2. Ignora mensagens enviadas pelo próprio bot ──────────────────────────
+  // ── 2. Reação → pausa o atendimento por 3 horas (antes de qualquer filtro) ─
+  // Deve vir antes do fromMe pois a reação do responsável chega com fromMe=true
+  if (tipoMensagem === 'reactionMessage') {
+    // Só pausa se a reação veio do responsável (fromMe=true) ou do próprio cliente
+    log.warn('Reação recebida — pausando atendimento por 3h', { requestId, telefoneCliente, fromMe: body?.data?.key?.fromMe });
+    cancel(telefoneCliente);
+    const clients = await getClientByPhone(telefoneCliente, config.empresaId);
+    if (clients.length > 0) {
+      await pauseClient(clients[0].id, 3);
+      log.info('Atendimento pausado por 3h', { requestId, telefoneCliente, id: clients[0].id });
+    } else {
+      log.warn('Reação de cliente não encontrado — ignorando', { requestId, telefoneCliente });
+    }
+    return;
+  }
+
+  // ── 3. Ignora mensagens enviadas pelo próprio bot ──────────────────────────
   if (body?.data?.key?.fromMe === true) {
     log.debug('Ignorando mensagem própria (fromMe=true)', { requestId, telefoneCliente });
     return;
@@ -69,7 +85,7 @@ async function processWebhook(body, requestId) {
     return;
   }
 
-  // ── 3. Processa apenas eventos de mensagem nova (MESSAGES_UPSERT) ─────────
+  // ── 4. Processa apenas eventos de mensagem nova (MESSAGES_UPSERT) ─────────
   const event = body?.event;
   if (event && event !== 'messages.upsert') {
     log.debug('Ignorando evento não relevante', { requestId, event, telefoneCliente });
@@ -78,19 +94,6 @@ async function processWebhook(body, requestId) {
 
   if (!event && body?.data?.status === 'DELIVERY_ACK') {
     log.debug('Ignorando DELIVERY_ACK', { requestId, telefoneCliente });
-    return;
-  }
-
-  // ── 4. Reação → pausa o atendimento ───────────────────────────────────────
-  if (tipoMensagem === 'reactionMessage') {
-    log.warn('Reação recebida — pausando atendimento', { requestId, telefoneCliente });
-    cancel(telefoneCliente);
-    const clients = await getClientByPhone(telefoneCliente, config.empresaId);
-    if (clients.length > 0) {
-      await pauseClient(clients[0].id);
-    } else {
-      log.warn('Reação de cliente não encontrado — ignorando', { requestId, telefoneCliente });
-    }
     return;
   }
 
