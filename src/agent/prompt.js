@@ -3,29 +3,50 @@
  */
 const SEP = '|||';
 
+function getSaoPauloNow() {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: 'numeric',
+        second: 'numeric',
+        hour12: false
+    });
+    const parts = formatter.formatToParts(new Date());
+    const partVal = (type) => parts.find(p => p.type === type).value;
+    const year = parseInt(partVal('year'));
+    const month = parseInt(partVal('month')) - 1; // 0-indexed
+    const day = parseInt(partVal('day'));
+    const hour = parseInt(partVal('hour'));
+    const minute = parseInt(partVal('minute'));
+    const second = parseInt(partVal('second'));
+    return new Date(Date.UTC(year, month, day, hour, minute, second));
+}
+
 function buildSystemPrompt(telefoneCliente) {
     // Data/hora explícita no fuso de São Paulo
-    const agora = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const agora = getSaoPauloNow();
     const diasSemana = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
-    const diaSemana  = diasSemana[agora.getDay()];
-    const dia        = String(agora.getDate()).padStart(2, '0');
-    const mes        = String(agora.getMonth() + 1).padStart(2, '0');
-    const ano        = agora.getFullYear();
-    const hora       = String(agora.getHours()).padStart(2, '0');
-    const minuto     = String(agora.getMinutes()).padStart(2, '0');
+    const diaSemana  = diasSemana[agora.getUTCDay()];
+    const dia        = String(agora.getUTCDate()).padStart(2, '0');
+    const mes        = String(agora.getUTCMonth() + 1).padStart(2, '0');
+    const ano        = agora.getUTCFullYear();
+    const hora       = String(agora.getUTCHours()).padStart(2, '0');
+    const minuto     = String(agora.getUTCMinutes()).padStart(2, '0');
     const isoAgora   = `${ano}-${mes}-${dia}T${hora}:${minuto}:00-03:00`;
 
     // Calcula os próximos 7 dias para o modelo resolver qualquer dia da semana
-    const diaBase = agora.getDate(); // guarda o dia original antes do loop
     const proximosDias = [];
     for (let i = 1; i <= 7; i++) {
         const d = new Date(agora);
-        d.setDate(diaBase + i);
-        const dd   = String(d.getDate()).padStart(2, '0');
-        const mm   = String(d.getMonth() + 1).padStart(2, '0');
-        const aaaa = d.getFullYear();
+        d.setUTCDate(agora.getUTCDate() + i);
+        const dd   = String(d.getUTCDate()).padStart(2, '0');
+        const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const aaaa = d.getUTCFullYear();
         const isoD = `${aaaa}-${mm}-${dd}`;
-        proximosDias.push(`- ${diasSemana[d.getDay()]} → ${dd}/${mm}/${aaaa} (ISO: ${isoD})`);
+        proximosDias.push(`- ${diasSemana[d.getUTCDay()]} → ${dd}/${mm}/${aaaa} (ISO: ${isoD})`);
     }
     const tabelaDias = proximosDias.join('\n');
 
@@ -43,6 +64,7 @@ Regras de data:
 - Para agendar/remarcar: converta sempre para ISO com -03:00. Ex: 2026-04-28T10:00:00-03:00
 - Para verificar cancelamento com menos de 2h: compare ISO da aula com ISO atual acima
 - NUNCA invente datas — use sempre a tabela acima
+- Se houver conflito entre o dia da semana e a data informados (ex: "terça, dia 27" sendo que terça é dia 26 e dia 27 é quarta), esclareça o conflito antes de prosseguir. NUNCA confirme uma data mentindo o dia da semana.
 
 Contato Academia/Darlen: **(51) 98010-1084**
 Contato Fisioterapia/Pilates (Fisio. Bruna Rossi): **(51) 99322-1645**
@@ -196,17 +218,17 @@ NÃO espere o aluno ser específico. Se perguntar "quanto custa?" → chame com 
 Se perguntar "vocês têm pilates?" → chame com query="modalidades pilates".
 Se perguntar "que horas abre?" → chame com query="horário funcionamento".
 Se o RAG não retornar a informação após 2 tentativas:
-- NÃO chame `notificar_humano`.
+- NÃO chame \`notificar_humano\`.
 - Responda: "Não encontrei essa informação agora, mas você pode falar direto com a equipe no WhatsApp: (51) 98010-1084."
 - Se a dúvida for sobre Fisioterapia ou Pilates: WhatsApp (51) 99322-1645.
 
-Use `notificar_humano` APENAS em:
+Use \`notificar_humano\` APENAS em:
 1. Aluno pede explicitamente para falar com um humano/atendente.
 2. Dúvida sobre cobrança, saldo incorreto ou renovação de plano.
 3. Erro técnico persistente na API ao tentar agendar/cancelar.
 4. Aluno quer comprar créditos ou renovar.
 
-NUNCA use `notificar_humano` para:
+NUNCA use \`notificar_humano\` para:
 - Informações sobre modalidades que não temos (ex: funcional, yoga). Apenas diga que não temos.
 - Pedido de fotos. Diga: "Não consigo enviar fotos por aqui agora, mas você pode ver no nosso Instagram instagram.com/darlenportal.fitness ou pedir no WhatsApp da Darlen (51) 98010-1084."
 - Perguntas sobre horários de fisioterapia. Forneça o contato da Bruna (51) 99322-1645.

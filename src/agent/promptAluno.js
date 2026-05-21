@@ -8,26 +8,47 @@
  */
 const SEP = '|||';
 
+function getSaoPauloNow() {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: 'numeric',
+        second: 'numeric',
+        hour12: false
+    });
+    const parts = formatter.formatToParts(new Date());
+    const partVal = (type) => parts.find(p => p.type === type).value;
+    const year = parseInt(partVal('year'));
+    const month = parseInt(partVal('month')) - 1; // 0-indexed
+    const day = parseInt(partVal('day'));
+    const hour = parseInt(partVal('hour'));
+    const minute = parseInt(partVal('minute'));
+    const second = parseInt(partVal('second'));
+    return new Date(Date.UTC(year, month, day, hour, minute, second));
+}
+
 function buildPromptAluno(telefoneCliente, alunoInfo = null, listaProfessores = []) {
-    const agora = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const agora = getSaoPauloNow();
     const diasSemana = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
-    const diaSemana  = diasSemana[agora.getDay()];
-    const dia        = String(agora.getDate()).padStart(2, '0');
-    const mes        = String(agora.getMonth() + 1).padStart(2, '0');
-    const ano        = agora.getFullYear();
-    const hora       = String(agora.getHours()).padStart(2, '0');
-    const minuto     = String(agora.getMinutes()).padStart(2, '0');
+    const diaSemana  = diasSemana[agora.getUTCDay()];
+    const dia        = String(agora.getUTCDate()).padStart(2, '0');
+    const mes        = String(agora.getUTCMonth() + 1).padStart(2, '0');
+    const ano        = agora.getUTCFullYear();
+    const hora       = String(agora.getUTCHours()).padStart(2, '0');
+    const minuto     = String(agora.getUTCMinutes()).padStart(2, '0');
     const isoAgora   = `${ano}-${mes}-${dia}T${hora}:${minuto}:00-03:00`;
 
-    const diaBase = agora.getDate();
     const proximosDias = [];
     for (let i = 1; i <= 7; i++) {
         const d = new Date(agora);
-        d.setDate(diaBase + i);
-        const dd   = String(d.getDate()).padStart(2, '0');
-        const mm   = String(d.getMonth() + 1).padStart(2, '0');
-        const aaaa = d.getFullYear();
-        proximosDias.push(`${diasSemana[d.getDay()]} = ${dd}/${mm}/${aaaa} → ISO: ${aaaa}-${mm}-${dd}`);
+        d.setUTCDate(agora.getUTCDate() + i);
+        const dd   = String(d.getUTCDate()).padStart(2, '0');
+        const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const aaaa = d.getUTCFullYear();
+        proximosDias.push(`${diasSemana[d.getUTCDay()]} = ${dd}/${mm}/${aaaa} → ISO: ${aaaa}-${mm}-${dd}`);
     }
 
     let infoAlunoStr = '';
@@ -128,6 +149,7 @@ Se NÃO estiver cadastrado, peça o email ou CPF e chame buscar_aluno para procu
 - "sexta", "terça", "amanhã" → use a tabela "Próximos 7 dias" acima. PONTO FINAL.
 - NUNCA use as datas de proximas_aulas para deduzir qual dia o aluno quer agendar.
 - Mostre sempre \`data_exibicao\` ao aluno. Passe \`data\` (ISO -03:00) às tools.
+- Se o aluno disser um dia da semana e uma data que não batem (ex: "terça, dia 27" sendo que terça é dia 26 e dia 27 é quarta), esclareça o conflito antes de prosseguir. NUNCA assuma nem repita datas com o dia da semana incorreto (ex: nunca responda "terça (27/05)").
 
 **DISPONIBILIDADE — REGRA ABSOLUTA:**
 - NUNCA liste, sugira ou mencione horários sem antes chamar verificar_disponibilidade. Nem um único horário.

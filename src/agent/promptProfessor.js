@@ -2,28 +2,48 @@
  * System prompt para PROFESSORES
  */
 
+function getSaoPauloNow() {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: 'numeric',
+        second: 'numeric',
+        hour12: false
+    });
+    const parts = formatter.formatToParts(new Date());
+    const partVal = (type) => parts.find(p => p.type === type).value;
+    const year = parseInt(partVal('year'));
+    const month = parseInt(partVal('month')) - 1; // 0-indexed
+    const day = parseInt(partVal('day'));
+    const hour = parseInt(partVal('hour'));
+    const minute = parseInt(partVal('minute'));
+    const second = parseInt(partVal('second'));
+    return new Date(Date.UTC(year, month, day, hour, minute, second));
+}
+
 function buildPromptProfessor(telefoneCliente, professor) {
-    const agora = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const agora = getSaoPauloNow();
     const diasSemana = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
-    const diaSemana  = diasSemana[agora.getDay()];
-    const dia        = String(agora.getDate()).padStart(2, '0');
-    const mes        = String(agora.getMonth() + 1).padStart(2, '0');
-    const ano        = agora.getFullYear();
-    const hora       = String(agora.getHours()).padStart(2, '0');
-    const minuto     = String(agora.getMinutes()).padStart(2, '0');
+    const diaSemana  = diasSemana[agora.getUTCDay()];
+    const dia        = String(agora.getUTCDate()).padStart(2, '0');
+    const mes        = String(agora.getUTCMonth() + 1).padStart(2, '0');
+    const ano        = agora.getUTCFullYear();
+    const hora       = String(agora.getUTCHours()).padStart(2, '0');
+    const minuto     = String(agora.getUTCMinutes()).padStart(2, '0');
     const isoAgora   = `${ano}-${mes}-${dia}T${hora}:${minuto}:00-03:00`;
 
-    // Tabela de 60 dias para cobrir qualquer data que o professor pedir
-    const diaBase = agora.getDate(); // guarda o dia original antes do loop
     const proximosDias = [];
     for (let i = 0; i <= 60; i++) {
         const d = new Date(agora);
-        d.setDate(diaBase + i);
-        const dd   = String(d.getDate()).padStart(2, '0');
-        const mm   = String(d.getMonth() + 1).padStart(2, '0');
-        const aaaa = d.getFullYear();
+        d.setUTCDate(agora.getUTCDate() + i);
+        const dd   = String(d.getUTCDate()).padStart(2, '0');
+        const mm   = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const aaaa = d.getUTCFullYear();
         const isoD = `${aaaa}-${mm}-${dd}`;
-        proximosDias.push(`- ${diasSemana[d.getDay()]} ${dd}/${mm}/${aaaa} → ISO: ${isoD}`);
+        proximosDias.push(`- ${diasSemana[d.getUTCDay()]} ${dd}/${mm}/${aaaa} → ISO: ${isoD}`);
     }
     const tabelaDias = proximosDias.join('\n');
 
@@ -50,6 +70,7 @@ Regras de data:
 - NUNCA diga que "o sistema não tem datas" ou "só tenho até X" — a tabela cobre 60 dias
 - NUNCA invente limitações. Se o professor pede o dia 18, chame agenda_dia com data="2026-05-18T00:00:00-03:00"
 - Se a agenda retornar vazia, responda "Nenhuma aula nesse dia." — não invente explicações
+- Se houver conflito entre o dia da semana e a data informados (ex: "terça, dia 27" sendo que terça é dia 26 e dia 27 é quarta), esclareça o conflito antes de prosseguir. NUNCA confirme uma data mentindo o dia da semana.
 
 ---
 
