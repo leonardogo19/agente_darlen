@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-const API_URL = 'https://studio-pilates-sigma.vercel.app/api/agente';
+const API_URL = 'http://localhost:3000/api/agente';
 const API_KEY = 'sk_68ga8uxd3o3edmuqyfrag4';
 const ALUNO_ID = 'fd5dbf0a-ed55-466b-96bd-81df5d65c1ca';
 const TELEFONE = '5551995009663@s.whatsapp.net';
@@ -19,7 +19,7 @@ async function testarAPI(acao, corpo = {}, params = {}, metodo = 'POST') {
     console.log(`\n==========================================`);
     console.log(`[TEST] Ação: ${acao} | Método: ${metodo}`);
     console.log(`Payload:`, JSON.stringify(payload, null, 2));
-    
+
     try {
         const response = await axios.post(API_URL, payload, {
             headers: {
@@ -27,7 +27,7 @@ async function testarAPI(acao, corpo = {}, params = {}, metodo = 'POST') {
                 'x-studio-key': API_KEY
             }
         });
-        
+
         console.log(`[SUCESSO] Status: ${response.status}`);
         console.log(`Resposta:`, JSON.stringify(response.data, null, 2));
         return response.data;
@@ -53,7 +53,7 @@ async function rodarTestes() {
     // ─────────────────────────────────────────────────────────────
     console.log("\n>>> TESTE 1: Buscar Aluno");
     const alunoRes = await testarAPI('alunos', {}, { q: TELEFONE }, 'GET');
-    
+
     if (!alunoRes || !alunoRes.sucesso || !alunoRes.alunos || alunoRes.alunos.length === 0) {
         console.log("Aluno não encontrado ou erro na busca. Parando testes.");
         return;
@@ -63,12 +63,14 @@ async function rodarTestes() {
     console.log(`\n[RESULTADO] Aluno: ${aluno.nome} | ID: ${aluno.id} | Saldo: ${aluno.saldo_aulas}`);
     console.log(`Próximas aulas ativas:`, aluno.proximas_aulas.map(a => `${a.data_exibicao || a.data} (${a.id})`));
 
-    // [LIMPEZA] Cancelar aula de teste anterior se existir em 22/05 às 18h00 para liberar o horário
-    const aulaTesteExistente = aluno.proximas_aulas?.find(a => a.data && a.data.includes('2026-05-22T18:00'));
-    if (aulaTesteExistente) {
-        console.log(`\n[LIMPEZA] Encontrada aula de teste residual em 22/05 às 18h00. Cancelando ID: ${aulaTesteExistente.id}`);
-        await testarAPI('cancelar', { agendamento_id: aulaTesteExistente.id, motivo: 'Limpeza de teste residual' });
-        
+    // [LIMPEZA] Cancelar aula de teste anterior se existir em 22/05 ou 05/06 às 14h30 para liberar o horário
+    const aulasTeste = aluno.proximas_aulas?.filter(a => a.data && (a.data.includes('2026-05-22T14:30') || a.data.includes('2026-06-05T14:30')));
+    if (aulasTeste && aulasTeste.length > 0) {
+        for (const aula of aulasTeste) {
+            console.log(`\n[LIMPEZA] Encontrada aula de teste residual em ${aula.data}. Cancelando ID: ${aula.id}`);
+            await testarAPI('cancelar', { agendamento_id: aula.id, motivo: 'Limpeza de teste residual' });
+        }
+
         // Recarregar os dados do aluno para atualizar a lista
         console.log("\n>>> Recarregando perfil do aluno pós-limpeza...");
         const recarga = await testarAPI('alunos', {}, { q: TELEFONE }, 'GET');
@@ -84,8 +86,7 @@ async function rodarTestes() {
     console.log("\n>>> TESTE 2: Cancelar Aula com Fallback por Data e ID Alucinado");
     // Vamos tentar cancelar a aula de 05/06 às 07h30 enviando um ID falso
     const cancelRes = await testarAPI('cancelar', {
-        agendamento_id: 'ID-FALSO-QUALQUER-1234567890',
-        data_aula: '2026-06-05T07:30:00-03:00', // Campo fallback
+        agendamento_id: '30f802b7-3789-40ab-877d-77add1bee677',
         aluno_id: ALUNO_ID,
         motivo: 'Cancelamento via Teste Automatizado de Fallback'
     });
@@ -109,10 +110,10 @@ async function rodarTestes() {
     // ─────────────────────────────────────────────────────────────
     // TESTE 4: Agendar Nova Aula (Marcar) na Sexta 22/05 às 18h00
     // ─────────────────────────────────────────────────────────────
-    console.log("\n>>> TESTE 4: Agendar Nova Aula (Marcar) Sexta 22/05 às 18h00");
+    console.log("\n>>> TESTE 4: Agendar Nova Aula (Marcar) Sexta 22/05 às 14h30");
     const agendarRes = await testarAPI('agendar', {
         aluno_id: ALUNO_ID,
-        data_inicio: '2026-05-22T18:00:00-03:00',
+        data_inicio: '2026-05-22T14:30:00-03:00',
         professor_id: '6b2bbaad-da13-4bcd-9486-c43a992dcf81', // Prof Darlen
         tipo_aula: 'aula'
     });
@@ -126,16 +127,16 @@ async function rodarTestes() {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // TESTE 5: Remarcar Aula Recém Criada (Sexta 22/05 às 18h00) para Sexta 05/06 às 18h00
+    // TESTE 5: Remarcar Aula Recém Criada (Sexta 22/05 às 14h30) para Sexta 05/06 às 14h30
     // ─────────────────────────────────────────────────────────────
     if (agendamentoCriadoId) {
-        console.log("\n>>> TESTE 5: Remarcar Aula para Novo Horário (Sexta 05/06 às 18h00)");
+        console.log("\n>>> TESTE 5: Remarcar Aula para Novo Horário (Sexta 05/06 às 14h30)");
         // Vamos passar o ID recém-criado, mas simulando o fallback de data_antiga também
         const remarcarRes = await testarAPI('remarcar', {
             agendamento_antigo_id: agendamentoCriadoId,
-            novo_inicio: '2026-06-05T18:00:00-03:00',
+            novo_inicio: '2026-06-05T14:30:00-03:00',
             aluno_id: ALUNO_ID,
-            data_antiga: '2026-05-22T18:00:00-03:00'
+            data_antiga: '2026-05-22T14:30:00-03:00'
         });
 
         if (remarcarRes && remarcarRes.sucesso) {
