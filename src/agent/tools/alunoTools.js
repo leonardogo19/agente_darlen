@@ -79,18 +79,19 @@ async function resolverAlunoId(valor, telefoneCliente) {
     if (isUUIDValido(valor)) return valor;
 
     const motivo = !isUUID(valor) ? 'formato invalido' : 'UUID truncado (zeros)';
-    log.warn('Guardrail', `aluno_id rejeitado (${motivo}) — resolvendo pelo contexto`, { valor, telefoneCliente });
+    log.warn('Guardrail', `aluno_id rejeitado (${motivo}) — resolvendo pelo telefone do contexto`, { valor, telefoneCliente });
 
-    const query = (!isUUID(valor) ? valor : null) || telefoneCliente;
-    if (!query) throw new Error('Nao ha valor valido para resolver aluno_id');
+    // Ignora o valor inválido (pode ser placeholder, nome, telefone ou UUID truncado)
+    // e resolve sempre pelo telefone confiável do contexto
+    if (!telefoneCliente) throw new Error('telefoneCliente ausente no contexto — impossivel resolver aluno_id');
 
-    const res = await chamarApiStudio({ acao: 'alunos', metodo: 'GET', params: { q: query } });
+    const res = await chamarApiStudio({ acao: 'alunos', metodo: 'GET', params: { q: telefoneCliente } });
     const aluno = res?.alunos?.[0];
     if (aluno?.id) {
-        log.info('Guardrail', 'aluno_id resolvido com sucesso', { original: valor, resolvido: aluno.id });
+        log.info('Guardrail', 'aluno_id resolvido via telefoneCliente', { original: valor, resolvido: aluno.id, telefoneCliente });
         return aluno.id;
     }
-    throw new Error(`Aluno nao encontrado para: ${query}`);
+    throw new Error(`Aluno nao encontrado pelo telefone: ${telefoneCliente}`);
 }
 
 async function resolverProfessorId(valor) {
@@ -103,7 +104,7 @@ async function resolverProfessorId(valor) {
     const professores = Array.isArray(res?.professores) ? res.professores : [];
     if (!professores.length) throw new Error('Lista de professores vazia ou inacessivel');
 
-    // Se for UUID truncado, tenta encontrar pelo prefixo (primeiros 8 chars)
+    // 1. Se for UUID truncado, tenta pelo prefixo (primeiros 8 chars)
     if (isUUID(valor)) {
         const prefixo = valor.split('-')[0].toLowerCase();
         const match = professores.find(p => p.id && p.id.startsWith(prefixo));
@@ -113,12 +114,18 @@ async function resolverProfessorId(valor) {
         }
     }
 
-    // Tenta por nome
+    // 2. Tenta por nome (funciona se o modelo passou o nome em vez do UUID)
     const normalizado = valor.toLowerCase().trim();
-    const match = professores.find(p => p.nome?.toLowerCase().includes(normalizado));
-    if (match?.id) {
-        log.info('Guardrail', 'professor_id resolvido pelo nome', { original: valor, resolvido: match.id });
-        return match.id;
+    const matchNome = professores.find(p => p.nome?.toLowerCase().includes(normalizado));
+    if (matchNome?.id) {
+        log.info('Guardrail', 'professor_id resolvido pelo nome', { original: valor, resolvido: matchNome.id });
+        return matchNome.id;
+    }
+
+    // 3. Fallback: se só há um professor no estúdio, usa ele (caso comum em estúdios pequenos)
+    if (professores.length === 1) {
+        log.warn('Guardrail', 'professor_id — usando unico professor disponivel como fallback', { original: valor, resolvido: professores[0].id });
+        return professores[0].id;
     }
 
     throw new Error(`Professor nao encontrado para: "${valor}". Disponiveis: ${professores.map(p => p.nome).join(', ')}`);
