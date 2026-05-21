@@ -75,11 +75,17 @@ function isUUIDValido(v) {
     return isUUID(v) && !isUUIDTruncado(v);
 }
 
-async function resolverAlunoId(valor, telefoneCliente) {
-    if (isUUIDValido(valor)) return valor;
+async function resolverAlunoId(valor, telefoneCliente, contextAlunoInfo) {
+    if (valor && isUUIDValido(valor)) return valor;
 
-    const motivo = !isUUID(valor) ? 'formato invalido' : 'UUID truncado (zeros)';
-    log.warn('Guardrail', `aluno_id rejeitado (${motivo}) — resolvendo pelo telefone do contexto`, { valor, telefoneCliente });
+    // Se temos a informação pré-carregada no contexto e o ID bate
+    if (contextAlunoInfo?.id) {
+        log.info('Guardrail', 'aluno_id resolvido via context.alunoInfo', { original: valor, resolvido: contextAlunoInfo.id });
+        return contextAlunoInfo.id;
+    }
+
+    const motivo = !valor ? 'ausente' : (!isUUID(valor) ? 'formato invalido' : 'UUID truncado (zeros)');
+    log.warn('Guardrail', `aluno_id rejeitado ou ausente (${motivo}) — resolvendo pelo telefone do contexto`, { valor, telefoneCliente });
 
     // Ignora o valor inválido (pode ser placeholder, nome, telefone ou UUID truncado)
     // e resolve sempre pelo telefone confiável do contexto
@@ -94,14 +100,16 @@ async function resolverAlunoId(valor, telefoneCliente) {
     throw new Error(`Aluno nao encontrado pelo telefone: ${telefoneCliente}`);
 }
 
-async function resolverProfessorId(valor) {
+async function resolverProfessorId(valor, listaProfessores = []) {
     if (isUUIDValido(valor)) return valor;
 
     const motivo = !isUUID(valor) ? 'formato invalido' : 'UUID truncado (zeros)';
     log.warn('Guardrail', `professor_id rejeitado (${motivo}) — buscando na lista`, { valor });
 
-    const res = await chamarApiStudio({ acao: 'professores', metodo: 'GET' });
-    const professores = Array.isArray(res?.professores) ? res.professores : [];
+    const professores = Array.isArray(listaProfessores) && listaProfessores.length > 0
+        ? listaProfessores
+        : (await chamarApiStudio({ acao: 'professores', metodo: 'GET' }))?.professores || [];
+
     if (!professores.length) throw new Error('Lista de professores vazia ou inacessivel');
 
     // 1. Se for UUID truncado, tenta pelo prefixo (primeiros 8 chars)
@@ -131,14 +139,98 @@ async function resolverProfessorId(valor) {
     throw new Error(`Professor nao encontrado para: "${valor}". Disponiveis: ${professores.map(p => p.nome).join(', ')}`);
 }
 
+function compararDatas(d1, d2) {
+    if (!d1 || !d2) return false;
+    if (d1 === d2) return true;
+    const date1 = new Date(d1);
+    const date2 = new Date(d2);
+    if (!isNaN(date1.getTime()) && !isNaN(date2.getTime())) {
+        return date1.getTime() === date2.getTime();
+    }
+    return false;
+}
+
+async function resolverAgendamentoId(dataAula, alunoId, context) {
+    if (!dataAula) return null;
+    
+    const dataAulaNorm = normalizarParaBrt(dataAula);
+    const alunoInfo = context?.alunoInfo;
+    let proximas = alunoInfo?.proximas_aulas || [];
+
+    if (proximas.length === 0 && context?.telefoneCliente) {
+        try {
+            log.info('Guardrail', 'proximas_aulas vazias ou nao carregadas - buscando da API para resolver agendamento_id', { alunoId, telefone: context.telefoneCliente });
+            const res = await chamarApiStudio({ acao: 'alunos', metodo: 'GET', params: { q: context.telefoneCliente } });
+            const dataConvertida = converterDatasAluno(res);
+            const freshAluno = dataConvertida?.alunos?.[0];
+            if (freshAluno?.proximas_aulas) {
+                proximas = freshAluno.proximas_aulas;
+            }
+        } catch (e) {
+            log.error('Guardrail', 'Erro ao buscar aluno para resolver agendamento_id', { erro: e.message });
+        }
+    }
+
+    const match = proximas.find(aula => {
+        if (!aula.data) return false;
+        const dataAulaBrt = normalizarParaBrt(aula.data);
+        return dataAulaBrt === dataAulaNorm || compararDatas(aula.data, dataAula);
+    });
+
+    if (match?.id) {
+        log.info('Guardrail', 'agendamento_id resolvido por data', { dataAula, resolvido: match.id });
+        return match.id;
+    }
+
+    log.warn('Guardrail', `Nao foi possivel resolver agendamento_id para a data ${dataAula}`, { proximas_aulas: proximas.map(a => a.data) });
+    throw new Error(`Nao foi possivel encontrar uma aula agendada na data ${dataAula}`);
+}
+
+function removerUUIDsRecursivo(obj) {
+    if (!obj || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) {
+        return obj.map(removerUUIDsRecursivo);
+    }
+    const clean = {};
+    for (const key of Object.keys(obj)) {
+        const val = obj[key];
+        if ((['id', 'aluno_id', 'professor_id', 'estudio_id', 'agendamento_id', 'agendamento_antigo_id'].includes(key) && isUUID(val)) || key === 'estudio_id') {
+            continue;
+        }
+        clean[key] = removerUUIDsRecursivo(val);
+    }
+    return clean;
+}
+
+const sanitizarRetornoAluno = removerUUIDsRecursivo;
+
 async function aplicarGuardrails(args, campos, context) {
     const corrigido = { ...args };
     const erros = [];
     for (const campo of campos) {
-        if (!corrigido[campo]) continue;
         try {
-            if (campo === 'aluno_id')    corrigido[campo] = await resolverAlunoId(corrigido[campo], context.telefoneCliente);
-            if (campo === 'professor_id') corrigido[campo] = await resolverProfessorId(corrigido[campo]);
+            if (campo === 'aluno_id') {
+                corrigido.aluno_id = await resolverAlunoId(corrigido.aluno_id, context.telefoneCliente, context.alunoInfo);
+            } else if (campo === 'professor') {
+                if (corrigido.professor) {
+                    corrigido.professor_id = await resolverProfessorId(corrigido.professor, context.listaProfessores);
+                    delete corrigido.professor;
+                }
+            } else if (campo === 'agendamento_id') {
+                if (corrigido.data_aula) {
+                    const resolvedId = await resolverAgendamentoId(corrigido.data_aula, corrigido.aluno_id, context);
+                    if (resolvedId) {
+                        corrigido.agendamento_id = resolvedId;
+                    }
+                }
+            } else if (campo === 'agendamento_antigo_id') {
+                if (corrigido.data_antiga) {
+                    const resolvedId = await resolverAgendamentoId(corrigido.data_antiga, corrigido.aluno_id, context);
+                    if (resolvedId) {
+                        corrigido.agendamento_antigo_id = resolvedId;
+                    }
+                }
+            }
         } catch (e) {
             erros.push({ campo, erro: e.message });
         }
@@ -152,7 +244,7 @@ const alunoToolDefinitions = [
         type: 'function',
         function: {
             name: 'buscar_aluno',
-            description: 'Busca um aluno pelo telefone, email ou CPF. Retorna: id (ALUNO_ID), nome, saldo_aulas, proximas_aulas (com id, data, data_exibicao, professor_id, professor), historico_aulas. Chame APENAS: (1) na primeira mensagem da conversa, ou (2) apos agendar/remarcar/cancelar para recarregar. NAO chame em toda mensagem.',
+            description: 'Busca um aluno pelo telefone, email ou CPF. Retorna: nome, saldo_aulas, proximas_aulas (com data, data_exibicao, professor), historico_aulas. Chame APENAS: (1) se o aluno nao estiver cadastrado no prompt, ou (2) apos agendar/remarcar/cancelar para recarregar. NAO chame em toda mensagem.',
             parameters: {
                 type: 'object',
                 required: ['q'],
@@ -183,10 +275,10 @@ const alunoToolDefinitions = [
         type: 'function',
         function: {
             name: 'verificar_disponibilidade',
-            description: 'Verifica horarios disponiveis. OBRIGATORIO antes de oferecer ou confirmar qualquer horario. O campo "inicio" de cada slot retornado e o valor EXATO a passar como data_inicio (agendar_aula) ou novo_inicio (remarcar_aula). O campo "professor_id" de cada slot e o PROFESSOR_ID a usar nas chamadas seguintes.',
+            description: 'Verifica horarios disponiveis. OBRIGATORIO antes de oferecer ou confirmar qualquer horario. O campo "inicio" de cada slot retornado e o valor EXATO a passar como data_inicio (agendar_aula) ou novo_inicio (remarcar_aula). O campo "professor" de cada slot e o professor a usar nas chamadas seguintes.',
             parameters: {
                 type: 'object',
-                required: ['inicio', 'aluno_id'],
+                required: ['inicio'],
                 properties: {
                     inicio: {
                         type: 'string',
@@ -196,13 +288,9 @@ const alunoToolDefinitions = [
                         type: 'string',
                         description: 'Fim da janela em ISO 8601 com -03:00. Horario especifico: inicio + 1h. Manha: T11:00:00-03:00. Tarde: T18:00:00-03:00. Noite: T22:00:00-03:00.',
                     },
-                    aluno_id: {
+                    professor: {
                         type: 'string',
-                        description: 'UUID completo do aluno — campo "id" de buscar_aluno. NUNCA use telefone ou UUID parcial.',
-                    },
-                    professor_id: {
-                        type: 'string',
-                        description: 'UUID completo do professor — campo "professor_id" de proximas_aulas ou slot anterior. NUNCA use nome. Inclua sempre que disponivel.',
+                        description: 'Nome do professor (ex: "Darlen"). Opcional.',
                     },
                 },
             },
@@ -212,22 +300,18 @@ const alunoToolDefinitions = [
         type: 'function',
         function: {
             name: 'agendar_aula',
-            description: 'Cria agendamento e debita 1 credito. APENAS apos confirmacao explicita do aluno. NUNCA sem verificar_disponibilidade antes. TODOS os IDs devem ser UUIDs COMPLETOS (formato: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx, 32 hex chars reais, nao zeros).',
+            description: 'Cria agendamento e debita 1 credito. APENAS apos confirmacao explicita do aluno. NUNCA sem verificar_disponibilidade antes.',
             parameters: {
                 type: 'object',
-                required: ['aluno_id', 'professor_id', 'data_inicio', 'tipo_aula'],
+                required: ['professor', 'data_inicio', 'tipo_aula'],
                 properties: {
-                    aluno_id: {
+                    professor: {
                         type: 'string',
-                        description: 'UUID COMPLETO do aluno — campo "id" de buscar_aluno. Copie o valor EXATO. NUNCA use telefone, nome ou UUID com zeros.',
-                    },
-                    professor_id: {
-                        type: 'string',
-                        description: 'UUID COMPLETO do professor — campo "professor_id" de verificar_disponibilidade. Copie o valor EXATO. NUNCA use nome ou UUID com zeros.',
+                        description: 'Nome do professor (ex: "Darlen").',
                     },
                     data_inicio: {
                         type: 'string',
-                        description: 'Campo "inicio" EXATO do slot de verificar_disponibilidade, em -03:00. NUNCA invente. Ex: 2026-05-21T09:00:00-03:00.',
+                        description: 'Campo "inicio" EXATO do slot de verificar_disponibilidade, em -03:00. Ex: 2026-05-21T09:00:00-03:00.',
                     },
                     tipo_aula: {
                         type: 'string',
@@ -246,27 +330,19 @@ const alunoToolDefinitions = [
             description: 'Remarca aula existente sem debitar saldo. Use SEMPRE para trocar horario — nunca cancelar + agendar. APENAS apos confirmacao do aluno e verificar_disponibilidade para o novo horario.',
             parameters: {
                 type: 'object',
-                required: ['aluno_id', 'data_antiga', 'novo_inicio'],
+                required: ['data_antiga', 'novo_inicio'],
                 properties: {
-                    aluno_id: {
-                        type: 'string',
-                        description: 'UUID COMPLETO do aluno — campo "id" de buscar_aluno.',
-                    },
                     data_antiga: {
                         type: 'string',
-                        description: 'Campo "data" (ISO -03:00) da aula a remarcar — de proximas_aulas.',
+                        description: 'Campo "data" (ISO -03:00) da aula a remarcar (obtida das proximas aulas no prompt).',
                     },
                     novo_inicio: {
                         type: 'string',
                         description: 'Campo "inicio" EXATO do slot de verificar_disponibilidade (ISO -03:00).',
                     },
-                    agendamento_antigo_id: {
+                    professor: {
                         type: 'string',
-                        description: 'Campo "id" da aula em proximas_aulas. Opcional mas altamente recomendado.',
-                    },
-                    professor_id: {
-                        type: 'string',
-                        description: 'UUID do professor. Opcional — mantem o mesmo da aula original se omitido.',
+                        description: 'Nome do professor (ex: "Darlen"). Opcional — mantem o mesmo da aula original se omitido.',
                     },
                 },
             },
@@ -279,19 +355,11 @@ const alunoToolDefinitions = [
             description: 'Cancela aula agendada. Devolve 1 credito se cancelado com mais de 2h de antecedencia. APENAS apos confirmacao do aluno. Verifique "devolveu_credito" no retorno.',
             parameters: {
                 type: 'object',
-                required: ['agendamento_id'],
+                required: ['data_aula'],
                 properties: {
-                    agendamento_id: {
-                        type: 'string',
-                        description: 'Campo "id" da aula em proximas_aulas. UUID completo, nunca inventado.',
-                    },
                     data_aula: {
                         type: 'string',
-                        description: 'Campo "data" (ISO -03:00) da aula — fallback se o ID nao for encontrado. Altamente recomendado.',
-                    },
-                    aluno_id: {
-                        type: 'string',
-                        description: 'UUID do aluno. Recomendado como fallback adicional.',
+                        description: 'Campo "data" (ISO -03:00) da aula a ser cancelada (obtida das proximas aulas no prompt).',
                     },
                     motivo: { type: 'string', description: 'Padrao: "Cancelamento solicitado pelo aluno".' },
                 },
@@ -302,7 +370,7 @@ const alunoToolDefinitions = [
         type: 'function',
         function: {
             name: 'listar_professores',
-            description: 'Lista professores com seus IDs UUID. Use quando precisar do professor_id e nao tiver disponivel no contexto.',
+            description: 'Lista nomes dos professores ativos do estúdio.',
             parameters: { type: 'object', properties: {} },
         },
     },
@@ -369,23 +437,37 @@ async function executeAlunoTool(name, args, context = {}) {
 
         case 'buscar_aluno': {
             const res = await chamarApiStudio({ acao: 'alunos', metodo: 'GET', params: { q: args.q } });
-            return converterDatasAluno(res);
+            const dataConvertida = converterDatasAluno(res);
+            return sanitizarRetornoAluno(dataConvertida);
         }
 
         case 'cadastrar_aluno':
             return chamarApiStudio({ acao: 'alunos', metodo: 'POST', corpo: args });
 
         case 'verificar_disponibilidade': {
-            const { corrigido, erros } = await aplicarGuardrails(args, ['aluno_id', 'professor_id'], context);
+            const { corrigido, erros } = await aplicarGuardrails(args, ['aluno_id', 'professor'], context);
             if (erros.length) {
                 log.error('Guardrail', 'IDs invalidos em verificar_disponibilidade', { erros });
                 return { sucesso: false, erro: 'ID_INVALIDO', detalhes: erros };
             }
-            return chamarApiStudio({ acao: 'verificar-disponibilidade', corpo: comTelefone(corrigido) });
+            const res = await chamarApiStudio({ acao: 'verificar-disponibilidade', corpo: comTelefone(corrigido) });
+            // Sanitiza para remover IDs de professor nas opções retornadas ao modelo
+            if (res && Array.isArray(res.disponiveis)) {
+                res.disponiveis = res.disponiveis.map(slot => {
+                    const cleanSlot = { ...slot };
+                    if (cleanSlot.professor_nome) {
+                        cleanSlot.professor = cleanSlot.professor_nome;
+                        delete cleanSlot.professor_nome;
+                    }
+                    delete cleanSlot.professor_id;
+                    return cleanSlot;
+                });
+            }
+            return res;
         }
 
         case 'agendar_aula': {
-            const { corrigido, erros } = await aplicarGuardrails(args, ['aluno_id', 'professor_id'], context);
+            const { corrigido, erros } = await aplicarGuardrails(args, ['aluno_id', 'professor'], context);
             if (erros.length) {
                 log.error('Guardrail', 'IDs invalidos em agendar_aula', { erros });
                 return { sucesso: false, erro: 'ID_INVALIDO', detalhes: erros };
@@ -402,7 +484,7 @@ async function executeAlunoTool(name, args, context = {}) {
         }
 
         case 'remarcar_aula': {
-            const { corrigido, erros } = await aplicarGuardrails(args, ['aluno_id', 'professor_id'], context);
+            const { corrigido, erros } = await aplicarGuardrails(args, ['aluno_id', 'professor', 'agendamento_antigo_id'], context);
             if (erros.length) {
                 log.error('Guardrail', 'IDs invalidos em remarcar_aula', { erros });
                 return { sucesso: false, erro: 'ID_INVALIDO', detalhes: erros };
@@ -418,8 +500,11 @@ async function executeAlunoTool(name, args, context = {}) {
         }
 
         case 'cancelar_aula': {
-            // Para cancelar, aluno_id nao resolvido nao e fatal — API tem fallback por _telefone_cliente
-            const { corrigido } = await aplicarGuardrails(args, ['aluno_id'], context);
+            const { corrigido, erros } = await aplicarGuardrails(args, ['aluno_id', 'agendamento_id'], context);
+            if (erros.length) {
+                log.error('Guardrail', 'IDs invalidos em cancelar_aula', { erros });
+                return { sucesso: false, erro: 'ID_INVALIDO', detalhes: erros };
+            }
             return chamarApiStudio({
                 acao: 'cancelar',
                 corpo: comTelefone({
@@ -431,8 +516,16 @@ async function executeAlunoTool(name, args, context = {}) {
             });
         }
 
-        case 'listar_professores':
-            return chamarApiStudio({ acao: 'professores', metodo: 'GET' });
+        case 'listar_professores': {
+            const res = await chamarApiStudio({ acao: 'professores', metodo: 'GET' });
+            if (res?.sucesso && Array.isArray(res.professores)) {
+                return {
+                    sucesso: true,
+                    professores: res.professores.map(p => ({ nome: p.nome })),
+                };
+            }
+            return res;
+        }
 
         case 'listar_pacotes':
             return chamarApiStudio({ acao: 'listar-pacotes', metodo: 'GET' });
@@ -467,4 +560,4 @@ async function executeAlunoTool(name, args, context = {}) {
 
 const alunoToolNames = alunoToolDefinitions.map(t => t.function.name);
 
-module.exports = { alunoToolDefinitions, executeAlunoTool, alunoToolNames };
+module.exports = { alunoToolDefinitions, executeAlunoTool, alunoToolNames, converterDatasAluno };

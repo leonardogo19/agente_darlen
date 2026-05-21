@@ -246,16 +246,48 @@ async function processMessages(messages, telefoneCliente, sessionId, serverUrl, 
     log.warn('Erro ao identificar professor — assumindo modo aluno', { telefoneCliente, error: err.message });
   }
 
+  // ── Pré-carregar dados do aluno e professores (Modo Aluno) ────────────────
+  let alunoInfo = null;
+  let listaProfessores = [];
+
+  if (modo === 'aluno') {
+    try {
+      const resAluno = await chamarApiStudio({ acao: 'alunos', metodo: 'GET', params: { q: telefoneCliente } });
+      const { converterDatasAluno } = require('../agent/tools/alunoTools');
+      const dataConvertida = converterDatasAluno(resAluno);
+      if (dataConvertida?.sucesso && Array.isArray(dataConvertida.alunos) && dataConvertida.alunos.length > 0) {
+        alunoInfo = dataConvertida.alunos[0];
+        log.info('🎓 Aluno identificado e carregado', { telefoneCliente, nome: alunoInfo.nome, id: alunoInfo.id, saldo: alunoInfo.saldo_aulas });
+      } else {
+        log.warn('Aluno não encontrado para o telefone no pré-carregamento', { telefoneCliente });
+      }
+    } catch (err) {
+      log.error('Erro ao buscar dados do aluno no pré-carregamento', { telefoneCliente, error: err.message });
+    }
+
+    try {
+      const resProf = await chamarApiStudio({ acao: 'professores', metodo: 'GET' });
+      if (resProf?.sucesso && Array.isArray(resProf.professores)) {
+        listaProfessores = resProf.professores;
+        log.info('📋 Lista de professores carregada', { total: listaProfessores.length });
+      }
+    } catch (err) {
+      log.error('Erro ao buscar lista de professores no pré-carregamento', { error: err.message });
+    }
+  }
+
   // ── Selecionar prompt correto ──────────────────────────────────────────────
   const systemPrompt = modo === 'professor'
     ? buildPromptProfessor(telefoneCliente, professor)
-    : buildPromptAluno(telefoneCliente);
+    : buildPromptAluno(telefoneCliente, alunoInfo, listaProfessores);
 
   // ── Chamar o agente com o modo correto ────────────────────────────────────
   const response = await runAgent(sessionId, combinedMessage, systemPrompt, {
     telefoneCliente,
     modo,
     professor,
+    alunoInfo,
+    listaProfessores,
     wpp: { serverUrl, nomeInstancia, apikey },
   });
 
