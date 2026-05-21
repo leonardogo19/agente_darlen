@@ -1,122 +1,156 @@
 const { chamarApiStudio } = require('../../studio/studioApi');
 
-// ─── Conversão de datas UTC → BRT (UTC-3) ────────────────────────────────────
+// ─── Logger estruturado ───────────────────────────────────────────────────────
+const log = {
+    warn:  (mod, msg, extra = {}) => console.warn( JSON.stringify({ ts: new Date().toISOString(), level: 'WARN',  emoji: 'WARN',  module: mod, message: msg, ...extra })),
+    info:  (mod, msg, extra = {}) => console.log(  JSON.stringify({ ts: new Date().toISOString(), level: 'INFO',  emoji: 'INFO',  module: mod, message: msg, ...extra })),
+    error: (mod, msg, extra = {}) => console.error(JSON.stringify({ ts: new Date().toISOString(), level: 'ERROR', emoji: 'ERROR', module: mod, message: msg, ...extra })),
+};
 
-const DIAS_SEMANA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+// ─── Conversão UTC → BRT ──────────────────────────────────────────────────────
+const DIAS_SEMANA = ['domingo','segunda-feira','terca-feira','quarta-feira','quinta-feira','sexta-feira','sabado'];
 
-function utcParaBrt(isoString) {
-    if (!isoString) return isoString;
-    const d = new Date(isoString);
-    if (isNaN(d.getTime())) return isoString;
-
-    const brt = new Date(d.getTime() - 3 * 60 * 60 * 1000);
-
-    const dia = String(brt.getUTCDate()).padStart(2, '0');
-    const mes = String(brt.getUTCMonth() + 1).padStart(2, '0');
-    const ano = brt.getUTCFullYear();
-    const hora = String(brt.getUTCHours()).padStart(2, '0');
-    const minuto = String(brt.getUTCMinutes()).padStart(2, '0');
-    const diaSem = DIAS_SEMANA[brt.getUTCDay()];
-
+function utcParaBrt(iso) {
+    if (!iso) return { iso, exibicao: iso };
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return { iso, exibicao: iso };
+    const b = new Date(d.getTime() - 3 * 3600000);
+    const dd = String(b.getUTCDate()).padStart(2,'0');
+    const mm = String(b.getUTCMonth()+1).padStart(2,'0');
+    const aa = b.getUTCFullYear();
+    const hh = String(b.getUTCHours()).padStart(2,'0');
+    const mi = String(b.getUTCMinutes()).padStart(2,'0');
     return {
-        iso: `${ano}-${mes}-${dia}T${hora}:${minuto}:00-03:00`,
-        exibicao: `${diaSem} (${dia}/${mes}) às ${hora}h${minuto}`,
+        iso:      `${aa}-${mm}-${dd}T${hh}:${mi}:00-03:00`,
+        exibicao: `${DIAS_SEMANA[b.getUTCDay()]} (${dd}/${mm}) as ${hh}h${mi}`,
     };
+}
+
+// Garante offset -03:00; converte se vier Z ou +00:00
+function normalizarParaBrt(iso) {
+    if (!iso) return iso;
+    if (/[+-]\d{2}:\d{2}$/.test(iso) && !iso.endsWith('+00:00')) return iso;
+    return utcParaBrt(iso).iso;
 }
 
 function normalizarNomeProfessor(nome) {
     if (!nome) return nome;
-    return nome
-        .replace(/\s+/g, ' ')
-        .trim()
-        .replace(/(\s+[a-z][a-zà-ú]*)+$/, '')
-        .trim();
+    return nome.replace(/\s+/g,' ').trim().replace(/(\s+[a-z][a-z]*)+$/,'').trim();
 }
 
 function converterDatasAluno(data) {
     if (!data?.sucesso || !Array.isArray(data.alunos)) return data;
-
-    data.alunos = data.alunos.map((aluno) => {
-        if (Array.isArray(aluno.proximas_aulas)) {
-            aluno.proximas_aulas = aluno.proximas_aulas.map((aula) => {
-                const brt = utcParaBrt(aula.data);
-                return {
-                    ...aula,
-                    data: brt.iso,
-                    data_exibicao: brt.exibicao,
-                    professor: normalizarNomeProfessor(aula.professor),
-                };
-            });
-        }
-        if (Array.isArray(aluno.historico_aulas)) {
-            aluno.historico_aulas = aluno.historico_aulas.map((aula) => {
-                const brt = utcParaBrt(aula.data);
-                return {
-                    ...aula,
-                    data: brt.iso,
-                    data_exibicao: brt.exibicao,
-                    professor: normalizarNomeProfessor(aula.professor),
-                };
-            });
-        }
+    data.alunos = data.alunos.map(aluno => {
+        ['proximas_aulas','historico_aulas'].forEach(campo => {
+            if (Array.isArray(aluno[campo])) {
+                aluno[campo] = aluno[campo].map(aula => {
+                    const brt = utcParaBrt(aula.data);
+                    return { ...aula, data: brt.iso, data_exibicao: brt.exibicao, professor: normalizarNomeProfessor(aula.professor) };
+                });
+            }
+        });
         return aluno;
     });
-
     return data;
 }
 
 // ─── Guardrails de UUID ───────────────────────────────────────────────────────
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function isUUID(value) {
-    return value && UUID_REGEX.test(value);
-}
+function isUUID(v) { return typeof v === 'string' && UUID_RE.test(v); }
 
 /**
- * Resolve aluno_id: se não for UUID (ex: telefone), busca o aluno e retorna o UUID real.
+ * UUID truncado com zeros: o modelo pega o prefixo correto e completa com 0s.
+ * Ex: "fd5dbf0a-0000-0000-0000-000000000000"
+ * Detecta se mais de metade dos hex chars (excluindo hífens) são zeros.
  */
-async function resolverAlunoId(aluno_id, telefoneCliente) {
-    if (isUUID(aluno_id)) return aluno_id;
+function isUUIDTruncado(v) {
+    if (!isUUID(v)) return false;
+    const hex = v.replace(/-/g,'');
+    const zeros = hex.split('').filter(c => c === '0').length;
+    return zeros >= 16; // mais de 50% zeros = suspeito
+}
 
-    // Tenta pelo valor passado (pode ser telefone ou email)
-    const query = aluno_id || telefoneCliente;
+function isUUIDValido(v) {
+    return isUUID(v) && !isUUIDTruncado(v);
+}
+
+async function resolverAlunoId(valor, telefoneCliente) {
+    if (isUUIDValido(valor)) return valor;
+
+    const motivo = !isUUID(valor) ? 'formato invalido' : 'UUID truncado (zeros)';
+    log.warn('Guardrail', `aluno_id rejeitado (${motivo}) — resolvendo pelo contexto`, { valor, telefoneCliente });
+
+    const query = (!isUUID(valor) ? valor : null) || telefoneCliente;
+    if (!query) throw new Error('Nao ha valor valido para resolver aluno_id');
+
     const res = await chamarApiStudio({ acao: 'alunos', metodo: 'GET', params: { q: query } });
     const aluno = res?.alunos?.[0];
-    if (aluno?.id) return aluno.id;
-
-    throw new Error(`Não foi possível resolver aluno_id a partir de: ${query}`);
+    if (aluno?.id) {
+        log.info('Guardrail', 'aluno_id resolvido com sucesso', { original: valor, resolvido: aluno.id });
+        return aluno.id;
+    }
+    throw new Error(`Aluno nao encontrado para: ${query}`);
 }
 
-/**
- * Resolve professor_id: se não for UUID (ex: nome "darlen"), busca na lista de professores.
- */
-async function resolverProfessorId(professor_id) {
-    if (isUUID(professor_id)) return professor_id;
+async function resolverProfessorId(valor) {
+    if (isUUIDValido(valor)) return valor;
+
+    const motivo = !isUUID(valor) ? 'formato invalido' : 'UUID truncado (zeros)';
+    log.warn('Guardrail', `professor_id rejeitado (${motivo}) — buscando na lista`, { valor });
 
     const res = await chamarApiStudio({ acao: 'professores', metodo: 'GET' });
-    const professores = res?.professores || [];
-    const match = professores.find((p) =>
-        p.nome?.toLowerCase().includes(professor_id?.toLowerCase())
-    );
-    if (match?.id) return match.id;
+    const professores = Array.isArray(res?.professores) ? res.professores : [];
+    if (!professores.length) throw new Error('Lista de professores vazia ou inacessivel');
 
-    throw new Error(`Não foi possível resolver professor_id a partir de: ${professor_id}`);
+    // Se for UUID truncado, tenta encontrar pelo prefixo (primeiros 8 chars)
+    if (isUUID(valor)) {
+        const prefixo = valor.split('-')[0].toLowerCase();
+        const match = professores.find(p => p.id && p.id.startsWith(prefixo));
+        if (match?.id) {
+            log.info('Guardrail', 'professor_id resolvido pelo prefixo UUID', { original: valor, resolvido: match.id });
+            return match.id;
+        }
+    }
+
+    // Tenta por nome
+    const normalizado = valor.toLowerCase().trim();
+    const match = professores.find(p => p.nome?.toLowerCase().includes(normalizado));
+    if (match?.id) {
+        log.info('Guardrail', 'professor_id resolvido pelo nome', { original: valor, resolvido: match.id });
+        return match.id;
+    }
+
+    throw new Error(`Professor nao encontrado para: "${valor}". Disponiveis: ${professores.map(p => p.nome).join(', ')}`);
+}
+
+async function aplicarGuardrails(args, campos, context) {
+    const corrigido = { ...args };
+    const erros = [];
+    for (const campo of campos) {
+        if (!corrigido[campo]) continue;
+        try {
+            if (campo === 'aluno_id')    corrigido[campo] = await resolverAlunoId(corrigido[campo], context.telefoneCliente);
+            if (campo === 'professor_id') corrigido[campo] = await resolverProfessorId(corrigido[campo]);
+        } catch (e) {
+            erros.push({ campo, erro: e.message });
+        }
+    }
+    return { corrigido, erros };
 }
 
 // ─── Tool Definitions ─────────────────────────────────────────────────────────
-
 const alunoToolDefinitions = [
     {
         type: 'function',
         function: {
             name: 'buscar_aluno',
-            description: 'Busca um aluno pelo telefone, email ou CPF. Chame APENAS na primeira mensagem da conversa para identificar o aluno, ou após uma ação (agendar/cancelar/remarcar) para recarregar os dados.',
+            description: 'Busca um aluno pelo telefone, email ou CPF. Retorna: id (ALUNO_ID), nome, saldo_aulas, proximas_aulas (com id, data, data_exibicao, professor_id, professor), historico_aulas. Chame APENAS: (1) na primeira mensagem da conversa, ou (2) apos agendar/remarcar/cancelar para recarregar. NAO chame em toda mensagem.',
             parameters: {
                 type: 'object',
                 required: ['q'],
                 properties: {
-                    q: { type: 'string', description: 'Telefone, email ou CPF do aluno' },
+                    q: { type: 'string', description: 'Telefone (ex: 5551999887766@s.whatsapp.net), email ou CPF.' },
                 },
             },
         },
@@ -125,15 +159,15 @@ const alunoToolDefinitions = [
         type: 'function',
         function: {
             name: 'cadastrar_aluno',
-            description: 'Cadastra um novo aluno no sistema.',
+            description: 'Cadastra um novo aluno. Use apenas quando buscar_aluno nao encontrar o aluno.',
             parameters: {
                 type: 'object',
                 required: ['nome', 'telefone'],
                 properties: {
-                    nome: { type: 'string' },
-                    telefone: { type: 'string' },
-                    email: { type: 'string' },
-                    cpf: { type: 'string' },
+                    nome:     { type: 'string' },
+                    telefone: { type: 'string', description: 'Formato: 55DDD9XXXXXXXX@s.whatsapp.net' },
+                    email:    { type: 'string' },
+                    cpf:      { type: 'string' },
                 },
             },
         },
@@ -142,26 +176,26 @@ const alunoToolDefinitions = [
         type: 'function',
         function: {
             name: 'verificar_disponibilidade',
-            description: 'Verifica horários disponíveis para agendamento. Sempre chame antes de oferecer ou confirmar qualquer horário. O campo "inicio" de cada slot retornado é o valor exato a usar como data_inicio em agendar_aula e como novo_inicio em remarcar_aula.',
+            description: 'Verifica horarios disponiveis. OBRIGATORIO antes de oferecer ou confirmar qualquer horario. O campo "inicio" de cada slot retornado e o valor EXATO a passar como data_inicio (agendar_aula) ou novo_inicio (remarcar_aula). O campo "professor_id" de cada slot e o PROFESSOR_ID a usar nas chamadas seguintes.',
             parameters: {
                 type: 'object',
                 required: ['inicio', 'aluno_id'],
                 properties: {
                     inicio: {
                         type: 'string',
-                        description: 'Data/hora de início da busca em ISO 8601 com offset -03:00. Ex: 2026-05-22T11:00:00-03:00',
+                        description: 'Inicio da janela em ISO 8601 com -03:00. Horario especifico: o exato pedido. Manha: T07:00:00-03:00. Tarde: T13:00:00-03:00. Noite: T18:00:00-03:00.',
                     },
                     fim: {
                         type: 'string',
-                        description: 'Data/hora final da busca em ISO 8601 com -03:00. Se omitido, busca por 1 hora a partir do início.',
+                        description: 'Fim da janela em ISO 8601 com -03:00. Horario especifico: inicio + 1h. Manha: T11:00:00-03:00. Tarde: T18:00:00-03:00. Noite: T22:00:00-03:00.',
                     },
                     aluno_id: {
                         type: 'string',
-                        description: 'UUID do aluno — campo "id" retornado por buscar_aluno. NUNCA use telefone aqui.',
+                        description: 'UUID completo do aluno — campo "id" de buscar_aluno. NUNCA use telefone ou UUID parcial.',
                     },
                     professor_id: {
                         type: 'string',
-                        description: 'UUID do professor — campo "professor_id" de proximas_aulas ou de um slot anterior. NUNCA use nome aqui.',
+                        description: 'UUID completo do professor — campo "professor_id" de proximas_aulas ou slot anterior. NUNCA use nome. Inclua sempre que disponivel.',
                     },
                 },
             },
@@ -171,27 +205,27 @@ const alunoToolDefinitions = [
         type: 'function',
         function: {
             name: 'agendar_aula',
-            description: 'Cria um agendamento e debita o saldo do aluno. Só chame após confirmação explícita do aluno. Use EXCLUSIVAMENTE UUIDs — nunca telefone como aluno_id, nunca nome como professor_id.',
+            description: 'Cria agendamento e debita 1 credito. APENAS apos confirmacao explicita do aluno. NUNCA sem verificar_disponibilidade antes. TODOS os IDs devem ser UUIDs COMPLETOS (formato: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx, 32 hex chars reais, nao zeros).',
             parameters: {
                 type: 'object',
                 required: ['aluno_id', 'professor_id', 'data_inicio', 'tipo_aula'],
                 properties: {
                     aluno_id: {
                         type: 'string',
-                        description: 'UUID do aluno (campo "id" de buscar_aluno). Formato: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+                        description: 'UUID COMPLETO do aluno — campo "id" de buscar_aluno. Copie o valor EXATO. NUNCA use telefone, nome ou UUID com zeros.',
                     },
                     professor_id: {
                         type: 'string',
-                        description: 'UUID do professor (campo "professor_id" de verificar_disponibilidade ou proximas_aulas). Formato: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+                        description: 'UUID COMPLETO do professor — campo "professor_id" de verificar_disponibilidade. Copie o valor EXATO. NUNCA use nome ou UUID com zeros.',
                     },
                     data_inicio: {
                         type: 'string',
-                        description: 'Campo "inicio" exato do slot retornado por verificar_disponibilidade, convertido para -03:00. Ex: 2026-05-22T11:00:00-03:00',
+                        description: 'Campo "inicio" EXATO do slot de verificar_disponibilidade, em -03:00. NUNCA invente. Ex: 2026-05-21T09:00:00-03:00.',
                     },
                     tipo_aula: {
                         type: 'string',
                         enum: ['aula', 'experimental'],
-                        description: '"aula" para aulas normais, "experimental" para primeira aula gratuita',
+                        description: '"aula" para aulas normais. "experimental" para primeira aula gratuita.',
                     },
                     observacoes: { type: 'string' },
                 },
@@ -202,30 +236,30 @@ const alunoToolDefinitions = [
         type: 'function',
         function: {
             name: 'remarcar_aula',
-            description: 'Remarca uma aula existente sem debitar saldo. Use SEMPRE para trocar horário — nunca cancelar + agendar.',
+            description: 'Remarca aula existente sem debitar saldo. Use SEMPRE para trocar horario — nunca cancelar + agendar. APENAS apos confirmacao do aluno e verificar_disponibilidade para o novo horario.',
             parameters: {
                 type: 'object',
                 required: ['aluno_id', 'data_antiga', 'novo_inicio'],
                 properties: {
                     aluno_id: {
                         type: 'string',
-                        description: 'UUID do aluno (campo "id" de buscar_aluno).',
+                        description: 'UUID COMPLETO do aluno — campo "id" de buscar_aluno.',
                     },
                     data_antiga: {
                         type: 'string',
-                        description: 'Campo "data" da aula a remarcar em proximas_aulas (ISO -03:00).',
+                        description: 'Campo "data" (ISO -03:00) da aula a remarcar — de proximas_aulas.',
                     },
                     novo_inicio: {
                         type: 'string',
-                        description: 'Campo "inicio" exato do slot retornado por verificar_disponibilidade (ISO -03:00).',
+                        description: 'Campo "inicio" EXATO do slot de verificar_disponibilidade (ISO -03:00).',
                     },
                     agendamento_antigo_id: {
                         type: 'string',
-                        description: 'Campo "id" da aula em proximas_aulas (opcional, mas recomendado).',
+                        description: 'Campo "id" da aula em proximas_aulas. Opcional mas altamente recomendado.',
                     },
                     professor_id: {
                         type: 'string',
-                        description: 'UUID do professor (opcional — mantém o mesmo da aula original se omitido).',
+                        description: 'UUID do professor. Opcional — mantem o mesmo da aula original se omitido.',
                     },
                 },
             },
@@ -235,24 +269,24 @@ const alunoToolDefinitions = [
         type: 'function',
         function: {
             name: 'cancelar_aula',
-            description: 'Cancela uma aula agendada. Devolve crédito se cancelado com mais de 2 horas de antecedência.',
+            description: 'Cancela aula agendada. Devolve 1 credito se cancelado com mais de 2h de antecedencia. APENAS apos confirmacao do aluno. Verifique "devolveu_credito" no retorno.',
             parameters: {
                 type: 'object',
                 required: ['agendamento_id'],
                 properties: {
                     agendamento_id: {
                         type: 'string',
-                        description: 'Campo "id" da aula em proximas_aulas.',
+                        description: 'Campo "id" da aula em proximas_aulas. UUID completo, nunca inventado.',
                     },
                     data_aula: {
                         type: 'string',
-                        description: 'Campo "data" da aula em proximas_aulas (ISO -03:00). Altamente recomendado.',
+                        description: 'Campo "data" (ISO -03:00) da aula — fallback se o ID nao for encontrado. Altamente recomendado.',
                     },
                     aluno_id: {
                         type: 'string',
-                        description: 'UUID do aluno.',
+                        description: 'UUID do aluno. Recomendado como fallback adicional.',
                     },
-                    motivo: { type: 'string' },
+                    motivo: { type: 'string', description: 'Padrao: "Cancelamento solicitado pelo aluno".' },
                 },
             },
         },
@@ -261,7 +295,7 @@ const alunoToolDefinitions = [
         type: 'function',
         function: {
             name: 'listar_professores',
-            description: 'Lista os professores disponíveis no estúdio.',
+            description: 'Lista professores com seus IDs UUID. Use quando precisar do professor_id e nao tiver disponivel no contexto.',
             parameters: { type: 'object', properties: {} },
         },
     },
@@ -269,7 +303,7 @@ const alunoToolDefinitions = [
         type: 'function',
         function: {
             name: 'listar_pacotes',
-            description: 'Lista os pacotes de aulas disponíveis para compra.',
+            description: 'Lista pacotes de aulas disponiveis. Use quando o aluno perguntar sobre planos ou renovacao.',
             parameters: { type: 'object', properties: {} },
         },
     },
@@ -277,12 +311,12 @@ const alunoToolDefinitions = [
         type: 'function',
         function: {
             name: 'buscar_info',
-            description: 'Busca informações sobre o estúdio (preços, horários, localização, modalidades, etc.) na base de conhecimento.',
+            description: 'Busca informacoes do estudio (precos, planos, funcionamento, localizacao, modalidades, convenios). Tente SEMPRE antes de notificar_humano por falta de info.',
             parameters: {
                 type: 'object',
                 required: ['query'],
                 properties: {
-                    query: { type: 'string', description: 'O que deseja buscar' },
+                    query: { type: 'string', description: 'Ex: "preco mensal", "horario de funcionamento", "pilates".' },
                 },
             },
         },
@@ -291,13 +325,13 @@ const alunoToolDefinitions = [
         type: 'function',
         function: {
             name: 'notificar_humano',
-            description: 'Notifica um atendente humano. Use APENAS quando: aluno pede humano, cobrança incorreta, ou erro técnico persistente.',
+            description: 'Notifica atendente humano. Use APENAS: (1) aluno pede humano, (2) cobranca incorreta, (3) erro tecnico persistente apos 2+ tentativas. NUNCA por falta de informacao. NUNCA diga "vou chamar a Darlen" sem ter chamado esta tool.',
             parameters: {
                 type: 'object',
                 required: ['problema'],
                 properties: {
-                    problema: { type: 'string' },
-                    telefone: { type: 'string' },
+                    problema: { type: 'string', description: 'Descricao clara do problema.' },
+                    telefone: { type: 'string', description: 'Telefone do aluno.' },
                 },
             },
         },
@@ -306,14 +340,14 @@ const alunoToolDefinitions = [
         type: 'function',
         function: {
             name: 'enviar_midia',
-            description: 'Envia uma imagem ou arquivo para o aluno.',
+            description: 'Envia imagem ou arquivo ao aluno via WhatsApp.',
             parameters: {
                 type: 'object',
-                required: ['url'],
+                required: ['url', 'telefone'],
                 properties: {
-                    url: { type: 'string' },
-                    caption: { type: 'string' },
-                    telefone: { type: 'string' },
+                    url:      { type: 'string', description: 'URL publica da midia.' },
+                    caption:  { type: 'string' },
+                    telefone: { type: 'string', description: 'Telefone do destinatario (formato WhatsApp).' },
                 },
             },
         },
@@ -321,105 +355,71 @@ const alunoToolDefinitions = [
 ];
 
 // ─── Executor ─────────────────────────────────────────────────────────────────
-
 async function executeAlunoTool(name, args, context = {}) {
-    const comTelefone = (corpo) => ({
-        ...corpo,
-        _telefone_cliente: context.telefoneCliente || null,
-    });
+    const comTelefone = corpo => ({ ...corpo, _telefone_cliente: context.telefoneCliente || null });
 
     switch (name) {
+
         case 'buscar_aluno': {
-            const resultado = await chamarApiStudio({ acao: 'alunos', metodo: 'GET', params: { q: args.q } });
-            return converterDatasAluno(resultado);
+            const res = await chamarApiStudio({ acao: 'alunos', metodo: 'GET', params: { q: args.q } });
+            return converterDatasAluno(res);
         }
 
         case 'cadastrar_aluno':
             return chamarApiStudio({ acao: 'alunos', metodo: 'POST', corpo: args });
 
-        case 'verificar_disponibilidade':
-            return chamarApiStudio({ acao: 'verificar-disponibilidade', corpo: comTelefone(args) });
+        case 'verificar_disponibilidade': {
+            const { corrigido, erros } = await aplicarGuardrails(args, ['aluno_id', 'professor_id'], context);
+            if (erros.length) {
+                log.error('Guardrail', 'IDs invalidos em verificar_disponibilidade', { erros });
+                return { sucesso: false, erro: 'ID_INVALIDO', detalhes: erros };
+            }
+            return chamarApiStudio({ acao: 'verificar-disponibilidade', corpo: comTelefone(corrigido) });
+        }
 
         case 'agendar_aula': {
-            // Guardrail: aluno_id deve ser UUID
-            let aluno_id = args.aluno_id;
-            let professor_id = args.professor_id;
-
-            if (!isUUID(aluno_id)) {
-                console.warn(`[agendar_aula] aluno_id inválido ("${aluno_id}") — resolvendo pelo telefone do contexto`);
-                try {
-                    aluno_id = await resolverAlunoId(aluno_id, context.telefoneCliente);
-                } catch (e) {
-                    return { sucesso: false, erro: 'ALUNO_ID_INVALIDO', mensagem: e.message };
+            const { corrigido, erros } = await aplicarGuardrails(args, ['aluno_id', 'professor_id'], context);
+            if (erros.length) {
+                log.error('Guardrail', 'IDs invalidos em agendar_aula', { erros });
+                return { sucesso: false, erro: 'ID_INVALIDO', detalhes: erros };
+            }
+            // Normaliza data_inicio para -03:00 caso venha em UTC
+            if (corrigido.data_inicio) {
+                const norm = normalizarParaBrt(corrigido.data_inicio);
+                if (norm !== corrigido.data_inicio) {
+                    log.warn('Guardrail', 'data_inicio convertida para BRT', { original: corrigido.data_inicio, normalizado: norm });
+                    corrigido.data_inicio = norm;
                 }
             }
-
-            if (!isUUID(professor_id)) {
-                console.warn(`[agendar_aula] professor_id inválido ("${professor_id}") — resolvendo pelo nome`);
-                try {
-                    professor_id = await resolverProfessorId(professor_id);
-                } catch (e) {
-                    return { sucesso: false, erro: 'PROFESSOR_ID_INVALIDO', mensagem: e.message };
-                }
-            }
-
-            return chamarApiStudio({
-                acao: 'agendar',
-                corpo: comTelefone({ ...args, aluno_id, professor_id }),
-            });
+            return chamarApiStudio({ acao: 'agendar', corpo: comTelefone(corrigido) });
         }
 
         case 'remarcar_aula': {
-            let aluno_id = args.aluno_id;
-            let professor_id = args.professor_id;
-
-            if (aluno_id && !isUUID(aluno_id)) {
-                console.warn(`[remarcar_aula] aluno_id inválido ("${aluno_id}") — resolvendo`);
-                try {
-                    aluno_id = await resolverAlunoId(aluno_id, context.telefoneCliente);
-                } catch (e) {
-                    return { sucesso: false, erro: 'ALUNO_ID_INVALIDO', mensagem: e.message };
+            const { corrigido, erros } = await aplicarGuardrails(args, ['aluno_id', 'professor_id'], context);
+            if (erros.length) {
+                log.error('Guardrail', 'IDs invalidos em remarcar_aula', { erros });
+                return { sucesso: false, erro: 'ID_INVALIDO', detalhes: erros };
+            }
+            if (corrigido.novo_inicio) {
+                const norm = normalizarParaBrt(corrigido.novo_inicio);
+                if (norm !== corrigido.novo_inicio) {
+                    log.warn('Guardrail', 'novo_inicio convertido para BRT', { original: corrigido.novo_inicio, normalizado: norm });
+                    corrigido.novo_inicio = norm;
                 }
             }
-
-            if (professor_id && !isUUID(professor_id)) {
-                console.warn(`[remarcar_aula] professor_id inválido ("${professor_id}") — resolvendo`);
-                try {
-                    professor_id = await resolverProfessorId(professor_id);
-                } catch (e) {
-                    return { sucesso: false, erro: 'PROFESSOR_ID_INVALIDO', mensagem: e.message };
-                }
-            }
-
-            return chamarApiStudio({
-                acao: 'remarcar',
-                corpo: comTelefone({
-                    ...args,
-                    ...(aluno_id && { aluno_id }),
-                    ...(professor_id && { professor_id }),
-                }),
-            });
+            return chamarApiStudio({ acao: 'remarcar', corpo: comTelefone(corrigido) });
         }
 
         case 'cancelar_aula': {
-            let aluno_id = args.aluno_id;
-
-            if (aluno_id && !isUUID(aluno_id)) {
-                console.warn(`[cancelar_aula] aluno_id inválido ("${aluno_id}") — resolvendo`);
-                try {
-                    aluno_id = await resolverAlunoId(aluno_id, context.telefoneCliente);
-                } catch (e) {
-                    aluno_id = undefined; // deixa a API tentar pelo telefone via _telefone_cliente
-                }
-            }
-
+            // Para cancelar, aluno_id nao resolvido nao e fatal — API tem fallback por _telefone_cliente
+            const { corrigido } = await aplicarGuardrails(args, ['aluno_id'], context);
             return chamarApiStudio({
                 acao: 'cancelar',
                 corpo: comTelefone({
-                    agendamento_id: args.agendamento_id,
-                    data_aula: args.data_aula,
-                    motivo: args.motivo || 'Cancelamento solicitado pelo aluno',
-                    ...(aluno_id && { aluno_id }),
+                    agendamento_id: corrigido.agendamento_id,
+                    data_aula:      corrigido.data_aula,
+                    motivo:         corrigido.motivo || 'Cancelamento solicitado pelo aluno',
+                    ...(corrigido.aluno_id && { aluno_id: corrigido.aluno_id }),
                 }),
             });
         }
@@ -430,11 +430,34 @@ async function executeAlunoTool(name, args, context = {}) {
         case 'listar_pacotes':
             return chamarApiStudio({ acao: 'listar-pacotes', metodo: 'GET' });
 
+        case 'buscar_info':
+            return chamarApiStudio({ acao: 'buscar-info', corpo: { query: args.query } });
+
+        case 'notificar_humano':
+            return chamarApiStudio({
+                acao: 'notificar-humano',
+                corpo: {
+                    problema: args.problema,
+                    telefone: args.telefone || context.telefoneCliente || null,
+                },
+            });
+
+        case 'enviar_midia':
+            return chamarApiStudio({
+                acao: 'enviar-midia',
+                corpo: {
+                    url:      args.url,
+                    caption:  args.caption || '',
+                    telefone: args.telefone || context.telefoneCliente || null,
+                },
+            });
+
         default:
-            return null;
+            log.warn('AlunoTools', `Tool desconhecida: ${name}`, { args });
+            return { sucesso: false, erro: 'TOOL_DESCONHECIDA', mensagem: `Tool "${name}" nao existe.` };
     }
 }
 
-const alunoToolNames = alunoToolDefinitions.map((t) => t.function.name);
+const alunoToolNames = alunoToolDefinitions.map(t => t.function.name);
 
 module.exports = { alunoToolDefinitions, executeAlunoTool, alunoToolNames };
